@@ -1,0 +1,28 @@
+app:
+  port: 8080
+  env: development
+database:
+  driver: postgres
+  source: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+  max_idle_conns: 10
+  max_open_conns: 100
+  conn_max_lifetime: 60 # minutes
+redis:
+  addr: "localhost:6379"
+  password: ""
+  db: 0
+  pool_size: 50
+  min_idle_conns: 10
+kafka:
+  brokers: ["localhost:9092"]
+  batch_size: 100
+  batch_timeout: 10 # milliseconds
+logger:
+  level: "debug"
+  director: "logs"
+  show_line: true
+  stacktrace_key: "stacktrace"
+  log_in_console: true
+  max_size: 10
+  max_backups: 5
+  max_age: 30
