@@ -2,79 +2,159 @@ package initialize
 
 import (
 	"context"
+	"fmt"
 	"time"
+
 	"trading-stock/internal/config"
-	"trading-stock/internal/domain"
-	"trading-stock/internal/global"
+	"trading-stock/internal/domain/account"
+	"trading-stock/internal/domain/market"
+	"trading-stock/internal/domain/order"
+	"trading-stock/internal/domain/portfolio"
+	"trading-stock/internal/domain/user"
 	"trading-stock/pkg/utils"
 
 	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
-func InitPosgresDB(ctx context.Context, cfg config.DatabaseConfig) error {
+// InitPostgresDB initializes PostgreSQL database connection with retry logic
+// Returns *gorm.DB instance instead of using global variables
+func InitPostgresDB(ctx context.Context, cfg config.DatabaseConfig, log *zap.Logger) (*gorm.DB, error) {
+	var db *gorm.DB
+
+	// Configure GORM logger
+	gormLogger := logger.Default.LogMode(logger.Silent)
+	if cfg.Driver == "debug" {
+		gormLogger = logger.Default.LogMode(logger.Info)
+	}
+
 	// Use retry with exponential backoff
 	retryCfg := utils.DefaultRetryConfig()
-	err := utils.DoWithRetry(ctx, global.Logger, "Postgres", retryCfg, func() error {
-		// 1. Cố gắng Open connection
+	err := utils.DoWithRetry(ctx, log, "PostgreSQL", retryCfg, func() error {
 		var err error
-		var db *gorm.DB
 
+		// 1. Open database connection
 		db, err = gorm.Open(postgres.Open(cfg.Source), &gorm.Config{
 			PrepareStmt: true,
+			Logger:      gormLogger,
 		})
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to open database: %w", err)
 		}
 
-		// 2. Open OK -> Check Ping
+		// 2. Get underlying *sql.DB
 		sqlDB, err := db.DB()
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get database instance: %w", err)
 		}
 
+		// 3. Verify connection with ping
 		if err = sqlDB.PingContext(ctx); err != nil {
-			return err
+			return fmt.Errorf("failed to ping database: %w", err)
 		}
 
-		// 3. OK -> Auto Migrate và Assign Global
-		// Lưu ý: AutoMigrate chỉ nên chạy khi kết nối chắc chắn OK.
-		// Nhưng nếu thích đơn giản có thể để ở đây hoặc ra ngoài.
-		// Để an toàn, ta chỉ connect ở đây. Migrate làm sau.
-		global.DB = db
+		log.Info("PostgreSQL connection established successfully")
 		return nil
 	})
 
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("failed to initialize PostgreSQL after retries: %w", err)
 	}
 
-	// 4. Cấu hình Connection Pool & Migrate (Chỉ chạy khi đã connect thành công)
-	// Lưu ý: global.DB đã được gán bên trong retry function nếu thành công
-	sqlDB, _ := global.DB.DB()
+	// 4. Configure connection pool
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get database instance: %w", err)
+	}
+
 	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
 	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
 	sqlDB.SetConnMaxLifetime(time.Duration(cfg.ConnMaxLifetime) * time.Minute)
 
-	// 5. Auto Migrate
-	if err := global.DB.AutoMigrate(
-		&domain.Order{},
-		&domain.Trade{},
-		&domain.Wallet{},
-	); err != nil {
-		return err
+	log.Info("PostgreSQL connection pool configured",
+		zap.Int("max_idle_conns", cfg.MaxIdleConns),
+		zap.Int("max_open_conns", cfg.MaxOpenConns),
+		zap.Int("conn_max_lifetime_minutes", cfg.ConnMaxLifetime),
+	)
+
+	return db, nil
+}
+
+// AutoMigrateModels runs database migrations for all domain models
+// This should be called separately after successful connection
+func AutoMigrateModels(db *gorm.DB, log *zap.Logger) error {
+	log.Info("Starting database migrations...")
+
+	// List of all domain models to migrate
+	models := []interface{}{
+		// User domain
+		&user.User{},
+
+		// Account domain
+		&account.Account{},
+
+		// Order domain
+		&order.Order{},
+
+		// Portfolio domain
+		&portfolio.Position{},
+
+		// Market domain
+		&market.Stock{},
+		&market.Price{},
+		&market.Candle{},
 	}
+
+	// Run migrations
+	if err := db.AutoMigrate(models...); err != nil {
+		return fmt.Errorf("failed to run migrations: %w", err)
+	}
+
+	log.Info("Database migrations completed successfully",
+		zap.Int("models_migrated", len(models)),
+	)
 
 	return nil
 }
 
-func ClosePosgresDB() {
-	if sqlDB, err := global.DB.DB(); err == nil {
-		if err := sqlDB.Close(); err != nil {
-			global.Logger.Error("Failed to close Postgres", zap.Error(err))
-		} else {
-			global.Logger.Info("Postgres connection closed")
-		}
+// ClosePostgresDB closes the PostgreSQL database connection
+func ClosePostgresDB(db *gorm.DB, log *zap.Logger) error {
+	if db == nil {
+		return nil
 	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		return fmt.Errorf("failed to get database instance: %w", err)
+	}
+
+	if err := sqlDB.Close(); err != nil {
+		log.Error("Failed to close PostgreSQL connection", zap.Error(err))
+		return fmt.Errorf("failed to close database: %w", err)
+	}
+
+	log.Info("PostgreSQL connection closed successfully")
+	return nil
+}
+
+// GetDatabaseStats returns database connection pool statistics
+func GetDatabaseStats(db *gorm.DB) (map[string]interface{}, error) {
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get database instance: %w", err)
+	}
+
+	stats := sqlDB.Stats()
+	return map[string]interface{}{
+		"max_open_connections": stats.MaxOpenConnections,
+		"open_connections":     stats.OpenConnections,
+		"in_use":               stats.InUse,
+		"idle":                 stats.Idle,
+		"wait_count":           stats.WaitCount,
+		"wait_duration":        stats.WaitDuration.String(),
+		"max_idle_closed":      stats.MaxIdleClosed,
+		"max_lifetime_closed":  stats.MaxLifetimeClosed,
+	}, nil
 }

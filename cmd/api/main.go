@@ -1,14 +1,27 @@
 package main
 
 import (
-	"trading-stock/internal/bootstrap"
-	"trading-stock/internal/global"
+	"context"
+	"log"
+	"os"
+
+	"trading-stock/internal/app"
 )
 
 func main() {
-	bootstrap.Setup()
-	// Log message should be before Run() because Run() blocks until shutdown
-	global.Logger.Info("System started successfully!")
+	// Create application context
+	ctx := context.Background()
 
-	bootstrap.Run()
+	// Initialize application with dependency injection
+	application, err := app.New(ctx)
+	if err != nil {
+		log.Fatalf("Failed to initialize application: %v", err)
+		os.Exit(1)
+	}
+
+	// Run application (blocks until shutdown signal)
+	if err := application.Run(); err != nil {
+		log.Fatalf("Application failed: %v", err)
+		os.Exit(1)
+	}
 }
