@@ -7,9 +7,11 @@ import (
 
 	"trading-stock/internal/config"
 	"trading-stock/internal/domain/account"
+	"trading-stock/internal/domain/execution"
 	"trading-stock/internal/domain/market"
 	"trading-stock/internal/domain/order"
 	"trading-stock/internal/domain/portfolio"
+	"trading-stock/internal/domain/risk"
 	"trading-stock/internal/domain/user"
 	"trading-stock/pkg/utils"
 
@@ -105,6 +107,16 @@ func AutoMigrateModels(db *gorm.DB, log *zap.Logger) error {
 		&market.Stock{},
 		&market.Price{},
 		&market.Candle{},
+
+		// Execution domain
+		&execution.Trade{},
+		&execution.Settlement{},
+		&execution.ClearingInstruction{},
+
+		// Risk domain
+		&risk.RiskLimit{},
+		&risk.RiskMetrics{},
+		&risk.RiskAlert{},
 	}
 
 	// Run migrations
