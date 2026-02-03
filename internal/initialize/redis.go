@@ -2,16 +2,17 @@ package initialize
 
 import (
 	"context"
-	"time"
 	"trading-stock/internal/config"
 	"trading-stock/internal/global"
 	"trading-stock/pkg/utils"
 
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 )
 
 func InitRedis(ctx context.Context, cfg config.RedisConfig) error {
-	return utils.DoWithRetry(ctx, global.Logger, "Redis", 2*time.Second, func() error {
+	retryCfg := utils.DefaultRetryConfig()
+	return utils.DoWithRetry(ctx, global.Logger, "Redis", retryCfg, func() error {
 		global.Redis = redis.NewClient(&redis.Options{
 			Addr:         cfg.Addr,
 			Password:     cfg.Password,
@@ -32,7 +33,10 @@ func InitRedis(ctx context.Context, cfg config.RedisConfig) error {
 
 func CloseRedis() {
 	if global.Redis != nil {
-		global.Redis.Close()
-		global.Logger.Info("Redis connection closed")
+		if err := global.Redis.Close(); err != nil {
+			global.Logger.Error("Failed to close Redis", zap.Error(err))
+		} else {
+			global.Logger.Info("Redis connection closed")
+		}
 	}
 }

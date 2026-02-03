@@ -14,8 +14,9 @@ import (
 
 // InitKafka: Chỉ chịu trách nhiệm kết nối và tạo Global Writer
 func InitKafka(ctx context.Context, cfg config.KafkaConfig) error {
-	// 1. Fail Fast: Ping thử tới Brokers
-	err := utils.DoWithRetry(ctx, global.Logger, "Kafka Connection", 2*time.Second, func() error {
+	// Use retry with exponential backoff for broker connection
+	retryCfg := utils.DefaultRetryConfig()
+	err := utils.DoWithRetry(ctx, global.Logger, "Kafka Connection", retryCfg, func() error {
 		for _, broker := range cfg.Brokers {
 			conn, err := kafka.Dial("tcp", broker)
 			if err == nil {

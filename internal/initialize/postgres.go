@@ -14,8 +14,9 @@ import (
 )
 
 func InitPosgresDB(ctx context.Context, cfg config.DatabaseConfig) error {
-	// Sử dụng Retry Helper
-	err := utils.DoWithRetry(ctx, global.Logger, "Postgres", 2*time.Second, func() error {
+	// Use retry with exponential backoff
+	retryCfg := utils.DefaultRetryConfig()
+	err := utils.DoWithRetry(ctx, global.Logger, "Postgres", retryCfg, func() error {
 		// 1. Cố gắng Open connection
 		var err error
 		var db *gorm.DB

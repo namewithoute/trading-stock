@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -12,7 +13,22 @@ type Config struct {
 	Redis    RedisConfig    `mapstructure:"redis"`
 	Kafka    KafkaConfig    `mapstructure:"kafka"`
 	Logger   LoggerConfig   `mapstructure:"logger"`
+	Init     InitConfig     `mapstructure:"init"`
 }
+
+type InitConfig struct {
+	StartupTimeout time.Duration `mapstructure:"startup_timeout"`
+	RetryConfig    RetryConfig   `mapstructure:"retry_config"`
+}
+
+type RetryConfig struct {
+	MaxAttempts     int           `mapstructure:"max_attempts"`
+	InitialInterval time.Duration `mapstructure:"initial_interval"`
+	MaxInterval     time.Duration `mapstructure:"max_interval"`
+	Multiplier      float64       `mapstructure:"multiplier"`
+	Jitter          bool          `mapstructure:"jitter"`
+}
+
 type AppConfig struct {
 	Port int    `mapstructure:"port"`
 	Env  string `mapstructure:"env"`

@@ -56,58 +56,71 @@ func Setup() {
 
 func Run() {
 	errChan := make(chan error, 1)
-	// 1. Khởi tạo Echo
+
+	// 1. Initialize Echo server
 	e := echo.New()
-	// 2. Cấu hình Middleware cơ bản
-	e.Use(middleware.Logger())  // Log các request HTTP
-	e.Use(middleware.Recover()) // Tránh crash server khi có panic
-	// 3. Định nghĩa Route đơn giản để test
+
+	// 2. Configure middleware
+	e.Use(middleware.Logger())
+	e.Use(middleware.Recover())
+
+	// 3. Define health check route
 	e.GET("/ping", func(c echo.Context) error {
+		time.Sleep(20 * time.Second)
 		return c.JSON(http.StatusOK, map[string]string{
 			"message": "pong",
+			"status":  "healthy",
 		})
 	})
-	// 4. Khởi chạy Server trong một Goroutine để không làm block chương trình
+
+	// 4. Start HTTP server in goroutine
 	go func() {
+		global.Logger.Info("Starting HTTP server on :8080")
 		if err := e.Start(":8080"); err != nil && err != http.ErrServerClosed {
+			global.Logger.Error("Server startup failed", zap.Error(err))
 			errChan <- err
 		}
 	}()
 
-	// 5. Thiết lập Graceful Shutdown (Lắng nghe tín hiệu từ OS)
+	// 5. Setup graceful shutdown signal listener
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-	// Chờ đợi 1 trong 2 sự kiện
+
+	// 6. Wait for shutdown signal or startup error
 	select {
 	case <-quit:
-		global.Logger.Info("Shutting down server (Signal received)...")
+		global.Logger.Info("Received shutdown signal (SIGTERM/SIGINT)")
 	case err := <-errChan:
-		global.Logger.Error("Shutting down server (Startup failed)", zap.Error(err))
+		global.Logger.Error("Server failed to start, initiating shutdown", zap.Error(err))
 	}
-	global.Logger.Info("Shutting down server...")
-	// Timeout 10 giây để server đóng các kết nối đang dang dở
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+
+	// 7. Execute graceful shutdown with proper timeout management
+	shutdownCfg := DefaultShutdownConfig()
+
+	// Create shutdown context
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownCfg.GracefulShutdownTimeout)
 	defer cancel()
-	if err := e.Shutdown(ctx); err != nil {
-		global.Logger.Fatal("Server forced to shutdown", zap.Error(err))
+
+	// Shutdown HTTP server first (stop accepting new requests)
+	global.Logger.Info("Shutting down HTTP server...")
+	serverShutdownCtx, serverCancel := context.WithTimeout(ctx, shutdownCfg.ServerShutdownTimeout)
+	defer serverCancel()
+
+	if err := e.Shutdown(serverShutdownCtx); err != nil {
+		global.Logger.Error("HTTP server forced shutdown", zap.Error(err))
+	} else {
+		global.Logger.Info("HTTP server stopped gracefully")
 	}
 
-	global.Logger.Info("Cleaning up resources...")
-
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		initialize.ClosePosgresDB()
-		initialize.CloseRedis()
-		initialize.CloseKafka()
-	}()
-
-	select {
-	case <-done:
-		global.Logger.Info("Resources closed successfully")
-	case <-ctx.Done():
-		global.Logger.Warn("Timeout during resource cleanup, forcing exit")
+	// Close all external resources (DB, Redis, Kafka)
+	if err := CloseAllResources(); err != nil {
+		global.Logger.Error("Resource cleanup failed", zap.Error(err))
 	}
+
+	// Final cleanup
 	global.Logger.Info("Server exited properly")
-	global.Logger.Sync()
+	if err := global.Logger.Sync(); err != nil {
+		// Ignore sync errors on Windows (known issue with zap)
+		// https://github.com/uber-go/zap/issues/880
+	}
 }

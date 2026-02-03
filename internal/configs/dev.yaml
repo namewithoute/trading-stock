@@ -26,3 +26,10 @@ logger:
   max_size: 10
   max_backups: 5
   max_age: 30
+init:
+  startup_timeout: 10s
+  retry_config:
+    max_attempts: 3
+    initial_interval: 1s
+    max_interval: 5s
+    multiplier: 2
