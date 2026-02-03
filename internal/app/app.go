@@ -6,7 +6,11 @@ import (
 	"time"
 
 	"trading-stock/internal/config"
+	"trading-stock/internal/handler"
+	"trading-stock/internal/infra"
 	"trading-stock/internal/initialize"
+	"trading-stock/internal/router"
+	"trading-stock/internal/usecase"
 	"trading-stock/pkg/logger"
 
 	"github.com/labstack/echo/v4"
@@ -25,10 +29,10 @@ type App struct {
 	Kafka  *kafka.Writer
 	Echo   *echo.Echo
 
-	// Use cases will be added here
-	// UserUseCase     usecase.UserUseCase
-	// OrderUseCase    usecase.OrderUseCase
-	// PortfolioUseCase usecase.PortfolioUseCase
+	// Dependency injection
+	Repositories *infra.Repositories
+	Services     *usecase.Usecases
+	Handlers     *handler.HandlerGroup
 }
 
 // New creates a new App instance with all dependencies initialized
@@ -47,17 +51,20 @@ func New(ctx context.Context) (*App, error) {
 	initCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	if err := app.initInfrastructure(initCtx); err != nil {
+	if err := app.initResources(initCtx); err != nil {
 		return nil, err
 	}
 
-	// Wire dependencies (repositories, use cases, handlers)
+	// Wire dependencies (repositories, services, handlers)
 	if err := app.wireDependencies(); err != nil {
 		return nil, err
 	}
 
-	// Initialize HTTP server
+	// Initialize HTTP server (after dependencies are ready)
 	app.initHTTPServer()
+
+	// Setup routers (must be after HTTP server init)
+	app.setupRouters()
 
 	app.Logger.Info("Application initialized successfully")
 	return app, nil
@@ -85,8 +92,8 @@ func (a *App) initLogger() error {
 	return nil
 }
 
-// initInfrastructure initializes all external dependencies
-func (a *App) initInfrastructure(ctx context.Context) error {
+// initResources initializes all external dependencies
+func (a *App) initResources(ctx context.Context) error {
 	var err error
 
 	// Initialize PostgreSQL
@@ -121,18 +128,38 @@ func (a *App) initInfrastructure(ctx context.Context) error {
 	return nil
 }
 
-// wireDependencies wires up all dependencies (repositories, use cases, handlers)
+// wireDependencies wires up all dependencies (repositories, services, handlers)
 func (a *App) wireDependencies() error {
-	// TODO: Initialize repositories
-	// userRepo := postgres.NewUserRepository(a.DB)
-	// orderRepo := postgres.NewOrderRepository(a.DB)
+	// ============================================
+	// REPOSITORIES
+	// ============================================
+	a.Repositories = infra.NewRepositories(a.DB)
+	a.Logger.Info("Infrastructure (Repositories) initialized")
 
-	// TODO: Initialize use cases
-	// a.UserUseCase = usecase.NewUserUseCase(userRepo, a.Logger)
-	// a.OrderUseCase = usecase.NewOrderUseCase(orderRepo, a.Kafka, a.Logger)
+	// ============================================
+	// USE CASES (SERVICES)
+	// ============================================
+	a.Services = usecase.NewUsecases(
+		a.Repositories,
+		a.Redis,
+		a.Kafka,
+		a.Logger,
+	)
+	a.Logger.Info("Use cases (Services) initialized")
 
-	// TODO: Initialize handlers and register routes
-	// handler.RegisterRoutes(a.Echo, userHandler, orderHandler)
+	// ============================================
+	// HANDLERS
+	// ============================================
+	a.Handlers = handler.NewHandlerGroup(a.Services)
+	a.Logger.Info("Handlers initialized")
 
+	a.Logger.Info("Dependencies wired successfully")
 	return nil
+}
+
+// setupRouters initializes and sets up all routers
+func (a *App) setupRouters() {
+	routerGroup := router.NewRouterGroup(a.Echo, a.Handlers)
+	routerGroup.Setup()
+	a.Logger.Info("Routers initialized")
 }

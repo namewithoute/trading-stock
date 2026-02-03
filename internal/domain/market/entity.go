@@ -18,7 +18,7 @@ type Stock struct {
 	IsTradable bool `json:"is_tradable" gorm:"default:true"`
 
 	// Timestamps
-	CreatedAt time.Time `json:"created_at" gorm:"not null"`
+	CreatedAt time.Time `json:"created_at" gorm:"not null "`
 	UpdatedAt time.Time `json:"updated_at" gorm:"not null"`
 }
 

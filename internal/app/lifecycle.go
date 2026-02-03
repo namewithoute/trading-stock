@@ -57,7 +57,7 @@ func (a *App) Shutdown() error {
 	}
 
 	// Close infrastructure connections
-	a.closeInfrastructure()
+	a.closeResources()
 
 	// Sync logger
 	_ = a.Logger.Sync() // Ignore sync errors on Windows
@@ -81,7 +81,7 @@ func (a *App) shutdownHTTPServer(ctx context.Context) error {
 }
 
 // closeInfrastructure closes all infrastructure connections
-func (a *App) closeInfrastructure() {
+func (a *App) closeResources() {
 	// Close database
 	if a.DB != nil {
 		if sqlDB, err := a.DB.DB(); err == nil {
