@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// riskLimitRepository implements risk.RiskLimitRepository
+// riskLimitRepository implements domain.RiskLimitRepository
 type riskLimitRepository struct {
 	db *gorm.DB
 }
@@ -58,7 +58,7 @@ func (r *riskLimitRepository) Delete(ctx context.Context, id string) error {
 	return r.db.WithContext(ctx).Delete(&risk.RiskLimit{}, "id = ?", id).Error
 }
 
-// riskMetricsRepository implements risk.RiskMetricsRepository
+// riskMetricsRepository implements domain.RiskMetricsRepository
 type riskMetricsRepository struct {
 	db *gorm.DB
 }
@@ -152,7 +152,7 @@ func (r *riskMetricsRepository) GetAggregateMetrics(ctx context.Context) (map[st
 	return result, nil
 }
 
-// riskAlertRepository implements risk.RiskAlertRepository
+// riskAlertRepository implements domain.RiskAlertRepository
 type riskAlertRepository struct {
 	db *gorm.DB
 }

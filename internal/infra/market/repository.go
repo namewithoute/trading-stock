@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// stockRepository implements market.StockRepository
+// stockRepository implements domain.StockRepository
 type stockRepository struct {
 	db *gorm.DB
 }
@@ -61,7 +61,7 @@ func (r *stockRepository) Delete(ctx context.Context, id string) error {
 	return r.db.WithContext(ctx).Delete(&market.Stock{}, "id = ?", id).Error
 }
 
-// priceRepository implements market.PriceRepository
+// priceRepository implements domain.PriceRepository
 type priceRepository struct {
 	db *gorm.DB
 }
@@ -96,7 +96,7 @@ func (r *priceRepository) BatchCreate(ctx context.Context, prices []*market.Pric
 	return r.db.WithContext(ctx).Create(&prices).Error
 }
 
-// candleRepository implements market.CandleRepository
+// candleRepository implements domain.CandleRepository
 type candleRepository struct {
 	db *gorm.DB
 }

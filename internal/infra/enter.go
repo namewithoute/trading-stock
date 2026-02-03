@@ -1,13 +1,7 @@
 package infra
 
 import (
-	"trading-stock/internal/domain/account"
-	"trading-stock/internal/domain/execution"
-	"trading-stock/internal/domain/market"
-	"trading-stock/internal/domain/order"
-	"trading-stock/internal/domain/portfolio"
-	"trading-stock/internal/domain/risk"
-	"trading-stock/internal/domain/user"
+	"trading-stock/internal/domain"
 
 	implAccount "trading-stock/internal/infra/account"
 	implExecution "trading-stock/internal/infra/execution"
@@ -20,26 +14,9 @@ import (
 	"gorm.io/gorm"
 )
 
-// Repositories groups all repositories together for dependency injection
-type Repositories struct {
-	User        user.Repository
-	Account     account.Repository
-	Order       order.Repository
-	Portfolio   portfolio.Repository
-	Stock       market.StockRepository
-	Price       market.PriceRepository
-	Candle      market.CandleRepository
-	Trade       execution.TradeRepository
-	Settlement  execution.SettlementRepository
-	Clearing    execution.ClearingRepository
-	RiskLimit   risk.RiskLimitRepository
-	RiskMetrics risk.RiskMetricsRepository
-	RiskAlert   risk.RiskAlertRepository
-}
-
 // NewRepositories initializes all repository implementations
-func NewRepositories(db *gorm.DB) *Repositories {
-	return &Repositories{
+func NewRepositories(db *gorm.DB) *domain.Repositories {
+	return &domain.Repositories{
 		User:        implUser.NewUserRepository(db),
 		Account:     implAccount.NewAccountRepository(db),
 		Order:       implOrder.NewOrderRepository(db),

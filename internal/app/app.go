@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"trading-stock/internal/config"
+	"trading-stock/internal/domain"
 	"trading-stock/internal/handler"
 	"trading-stock/internal/infra"
 	"trading-stock/internal/initialize"
@@ -30,8 +31,8 @@ type App struct {
 	Echo   *echo.Echo
 
 	// Dependency injection
-	Repositories *infra.Repositories
-	Services     *usecase.Usecases
+	Repositories *domain.Repositories
+	Usecases     *usecase.Usecases
 	Handlers     *handler.HandlerGroup
 }
 
@@ -139,7 +140,7 @@ func (a *App) wireDependencies() error {
 	// ============================================
 	// USE CASES (SERVICES)
 	// ============================================
-	a.Services = usecase.NewUsecases(
+	a.Usecases = usecase.NewUsecases(
 		a.Repositories,
 		a.Redis,
 		a.Kafka,
@@ -150,7 +151,7 @@ func (a *App) wireDependencies() error {
 	// ============================================
 	// HANDLERS
 	// ============================================
-	a.Handlers = handler.NewHandlerGroup(a.Services)
+	a.Handlers = handler.NewHandlerGroup(a.Usecases)
 	a.Logger.Info("Handlers initialized")
 
 	a.Logger.Info("Dependencies wired successfully")

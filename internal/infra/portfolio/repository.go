@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// portfolioRepository implements portfolio.Repository interface
+// portfolioRepository implements domain.PortfolioRepository interface
 type portfolioRepository struct {
 	db *gorm.DB
 }

@@ -32,7 +32,7 @@ type Repository interface {
 	Delete(ctx context.Context, id string) error
 
 	// List retrieves all users with pagination
-	List(ctx context.Context, limit, offset int) ([]*User, error)
+	List(ctx context.Context, limit, offset int) ([]User, error)
 
 	// Count returns the total number of users
 	Count(ctx context.Context) (int64, error)

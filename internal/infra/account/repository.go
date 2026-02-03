@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// accountRepository implements account.Repository interface
+// accountRepository implements domain.AccountRepository interface
 type accountRepository struct {
 	db *gorm.DB
 }

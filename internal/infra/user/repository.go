@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// userRepository implements user.Repository interface
+// userRepository implements domain.UserRepository interface
 type userRepository struct {
 	db *gorm.DB
 }
@@ -107,8 +107,8 @@ func (r *userRepository) Delete(ctx context.Context, id string) error {
 }
 
 // List retrieves all users with pagination
-func (r *userRepository) List(ctx context.Context, limit, offset int) ([]*user.User, error) {
-	var users []*user.User
+func (r *userRepository) List(ctx context.Context, limit, offset int) ([]user.User, error) {
+	var users []user.User
 	err := r.db.WithContext(ctx).
 		Limit(limit).
 		Offset(offset).

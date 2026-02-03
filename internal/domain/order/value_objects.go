@@ -1,5 +1,7 @@
 package order
 
+import "errors"
+
 // Side represents the direction of the order (buy or sell)
 type Side string
 
@@ -74,3 +76,11 @@ func (s Status) IsFinal() bool {
 func (s Status) String() string {
 	return string(s)
 }
+
+// Domain errors
+var (
+	ErrOrderNotFound    = errors.New("order not found")
+	ErrInvalidStatus    = errors.New("invalid order status")
+	ErrInvalidOrderType = errors.New("invalid order type")
+	ErrInvalidSide      = errors.New("invalid order side")
+)

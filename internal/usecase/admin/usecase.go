@@ -10,7 +10,7 @@ import (
 
 // UseCase handles admin business logic
 type UseCase interface {
-	ListUsers(ctx context.Context) (interface{}, error)
+	ListUsers(ctx context.Context) ([]user.User, error)
 	GetSystemStats(ctx context.Context) (interface{}, error)
 }
 
@@ -24,11 +24,21 @@ func NewUseCase(userRepo user.Repository, orderRepo order.Repository, logger *za
 	return &useCase{userRepo: userRepo, orderRepo: orderRepo, logger: logger}
 }
 
-func (s *useCase) ListUsers(ctx context.Context) (interface{}, error) {
-	return s.userRepo.List(ctx, 20, 0)
+func (s *useCase) ListUsers(ctx context.Context) ([]user.User, error) {
+	users, err := s.userRepo.List(ctx, 20, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	return users, nil
 }
 
 func (s *useCase) GetSystemStats(ctx context.Context) (interface{}, error) {
-	// TODO: Implement system stats aggregation
-	return nil, nil
+	userCount, _ := s.userRepo.Count(ctx)
+	// Add more stats if repository methods exist
+
+	return map[string]interface{}{
+		"total_users":   userCount,
+		"system_status": "operational",
+	}, nil
 }

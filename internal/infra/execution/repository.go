@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// tradeRepository implements execution.TradeRepository
+// tradeRepository implements domain.TradeRepository
 type tradeRepository struct {
 	db *gorm.DB
 }
@@ -67,7 +67,7 @@ func (r *tradeRepository) GetTotalVolumeBySymbol(ctx context.Context, symbol str
 	return totalVolume, err
 }
 
-// settlementRepository implements execution.SettlementRepository
+// settlementRepository implements domain.SettlementRepository
 type settlementRepository struct {
 	db *gorm.DB
 }
@@ -120,7 +120,7 @@ func (r *settlementRepository) CountByStatus(ctx context.Context, status executi
 	return count, err
 }
 
-// clearingRepository implements execution.ClearingRepository
+// clearingRepository implements domain.ClearingRepository
 type clearingRepository struct {
 	db *gorm.DB
 }

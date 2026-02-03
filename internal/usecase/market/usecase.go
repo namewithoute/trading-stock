@@ -10,8 +10,9 @@ import (
 
 // UseCase handles market data business logic
 type UseCase interface {
-	ListStocks(ctx context.Context) (interface{}, error)
-	GetStockDetail(ctx context.Context, symbol string) (interface{}, error)
+	ListStocks(ctx context.Context) ([]*market.Stock, error)
+	GetStockDetail(ctx context.Context, symbol string) (*market.Stock, error)
+	GetLatestPrice(ctx context.Context, symbol string) (*market.Price, error)
 }
 
 type useCase struct {
@@ -38,10 +39,14 @@ func NewUseCase(
 	}
 }
 
-func (s *useCase) ListStocks(ctx context.Context) (interface{}, error) {
+func (s *useCase) ListStocks(ctx context.Context) ([]*market.Stock, error) {
 	return s.stockRepo.List(ctx, 100, 0)
 }
 
-func (s *useCase) GetStockDetail(ctx context.Context, symbol string) (interface{}, error) {
+func (s *useCase) GetStockDetail(ctx context.Context, symbol string) (*market.Stock, error) {
 	return s.stockRepo.GetBySymbol(ctx, symbol)
+}
+
+func (s *useCase) GetLatestPrice(ctx context.Context, symbol string) (*market.Price, error) {
+	return s.priceRepo.GetLatest(ctx, symbol)
 }
