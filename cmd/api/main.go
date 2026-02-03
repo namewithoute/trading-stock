@@ -7,12 +7,8 @@ import (
 
 func main() {
 	bootstrap.Setup()
-	bootstrap.Run()
-	defer func() {
-		if global.Logger != nil {
-			global.Logger.Sync()
-		}
-	}()
-
+	// Log message should be before Run() because Run() blocks until shutdown
 	global.Logger.Info("System started successfully!")
+
+	bootstrap.Run()
 }

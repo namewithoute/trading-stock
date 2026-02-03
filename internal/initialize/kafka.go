@@ -2,44 +2,67 @@ package initialize
 
 import (
 	"context"
+	"fmt"
 	"time"
 	"trading-stock/internal/config"
+	"trading-stock/internal/global"
+	"trading-stock/pkg/utils"
 
 	"github.com/segmentio/kafka-go"
+	"go.uber.org/zap"
 )
 
-func InitKafka(cfg config.KafkaConfig) (*kafka.Writer, error) {
-	// In Kafka, we usually don't have a single "connection" object like DB.
-	// Instead, we verify if brokers are reachable.
-	for _, broker := range cfg.Brokers {
-		conn, err := kafka.DialContext(context.Background(), "tcp", broker)
-		if err != nil {
-			return nil, err
+// InitKafka: Chỉ chịu trách nhiệm kết nối và tạo Global Writer
+func InitKafka(ctx context.Context, cfg config.KafkaConfig) error {
+	// 1. Fail Fast: Ping thử tới Brokers
+	err := utils.DoWithRetry(ctx, global.Logger, "Kafka Connection", 2*time.Second, func() error {
+		for _, broker := range cfg.Brokers {
+			conn, err := kafka.Dial("tcp", broker)
+			if err == nil {
+				conn.Close()
+				return nil
+			}
 		}
-		conn.Close()
-	}
-	return GetKafkaWriter(cfg, "orders"), nil
-}
-
-// GetKafkaWriter returns a new Kafka writer for a specific topic with optimization
-func GetKafkaWriter(cfg config.KafkaConfig, topic string) *kafka.Writer {
-	return &kafka.Writer{
-		Addr:         kafka.TCP(cfg.Brokers...),
-		Topic:        topic,
-		Balancer:     &kafka.LeastBytes{},
-		BatchSize:    cfg.BatchSize,
-		BatchTimeout: time.Duration(cfg.BatchTimeout) * time.Millisecond,
-		Async:        true, // Send messages asynchronously for better performance
-	}
-}
-
-// GetKafkaReader returns a new Kafka reader for a specific topic and group
-func GetKafkaReader(cfg config.KafkaConfig, topic, groupID string) *kafka.Reader {
-	return kafka.NewReader(kafka.ReaderConfig{
-		Brokers:  cfg.Brokers,
-		GroupID:  groupID,
-		Topic:    topic,
-		MinBytes: 10e3, // 10KB
-		MaxBytes: 10e6, // 10MB
+		return fmt.Errorf("failed to connect to any kafka broker")
 	})
+
+	if err != nil {
+		return err
+	}
+
+	// 2. Init Producer (Writer) với cấu hình tối ưu
+	// Topic "orders" có thể lấy từ config thay vì hardcode
+	global.Kafka = &kafka.Writer{
+		Addr:     kafka.TCP(cfg.Brokers...),
+		Topic:    "orders",            // Nên đưa vào Config: cfg.Topic
+		Balancer: &kafka.LeastBytes{}, // Phân phối load thông minh dựa trên dung lượng
+
+		// --- PERFORMANCE TUNING ---
+		// Gom 100 tin nhắn hoặc chờ 10ms rồi mới gửi 1 lần -> Tăng throughput cực mạnh
+		BatchSize:    100,
+		BatchTimeout: 10 * time.Millisecond,
+
+		// Nén data giúp giảm tải Network (mạnh hơn Gzip, ít tốn CPU hơn)
+		Compression: kafka.Snappy,
+
+		// Timeout cho việc write (tránh treo app nếu Kafka chết)
+		WriteTimeout: 10 * time.Second,
+
+		// Retry policy: Thử lại 3 lần nếu lỗi mạng nhẹ, mỗi lần cách nhau 2-10s
+		MaxAttempts: 3,
+	}
+
+	return nil
+}
+
+// Hàm đóng Kafka chuẩn (đặt ở bootstrap/startup.go)
+func CloseKafka() {
+	if global.Kafka != nil {
+		// Close() sẽ tự động flush các tin nhắn còn tồn đọng trong buffer
+		if err := global.Kafka.Close(); err != nil {
+			global.Logger.Error("Failed to close Kafka writer", zap.Error(err))
+		} else {
+			global.Logger.Info("Kafka writer closed successfully")
+		}
+	}
 }

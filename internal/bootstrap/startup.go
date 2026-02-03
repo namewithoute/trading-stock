@@ -37,19 +37,17 @@ func Setup() {
 	if err != nil {
 		panic("Failed to initialize logger: " + err.Error())
 	}
-
-	global.DB, err = initialize.InitPosgresDB(cfg.Database)
-	if err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := initialize.InitPosgresDB(ctx, cfg.Database); err != nil {
 		global.Logger.Panic("Failed to initialize postgres", zap.Error(err))
 	}
 
-	global.Redis, err = initialize.InitRedis(cfg.Redis)
-	if err != nil {
+	if err := initialize.InitRedis(ctx, cfg.Redis); err != nil {
 		global.Logger.Panic("Failed to initialize redis", zap.Error(err))
 	}
 
-	global.Kafka, err = initialize.InitKafka(cfg.Kafka)
-	if err != nil {
+	if err := initialize.InitKafka(ctx, cfg.Kafka); err != nil {
 		global.Logger.Panic("Failed to initialize kafka", zap.Error(err))
 	}
 
@@ -57,6 +55,7 @@ func Setup() {
 }
 
 func Run() {
+	errChan := make(chan error, 1)
 	// 1. Khởi tạo Echo
 	e := echo.New()
 	// 2. Cấu hình Middleware cơ bản
@@ -71,13 +70,20 @@ func Run() {
 	// 4. Khởi chạy Server trong một Goroutine để không làm block chương trình
 	go func() {
 		if err := e.Start(":8080"); err != nil && err != http.ErrServerClosed {
-			global.Logger.Fatal("Failed to start server", zap.Error(err))
+			errChan <- err
 		}
 	}()
+
 	// 5. Thiết lập Graceful Shutdown (Lắng nghe tín hiệu từ OS)
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-	<-quit // Chờ đợi tín hiệu tắt (Ctrl + C)
+	// Chờ đợi 1 trong 2 sự kiện
+	select {
+	case <-quit:
+		global.Logger.Info("Shutting down server (Signal received)...")
+	case err := <-errChan:
+		global.Logger.Error("Shutting down server (Startup failed)", zap.Error(err))
+	}
 	global.Logger.Info("Shutting down server...")
 	// Timeout 10 giây để server đóng các kết nối đang dang dở
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -85,5 +91,23 @@ func Run() {
 	if err := e.Shutdown(ctx); err != nil {
 		global.Logger.Fatal("Server forced to shutdown", zap.Error(err))
 	}
+
+	global.Logger.Info("Cleaning up resources...")
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		initialize.ClosePosgresDB()
+		initialize.CloseRedis()
+		initialize.CloseKafka()
+	}()
+
+	select {
+	case <-done:
+		global.Logger.Info("Resources closed successfully")
+	case <-ctx.Done():
+		global.Logger.Warn("Timeout during resource cleanup, forcing exit")
+	}
 	global.Logger.Info("Server exited properly")
+	global.Logger.Sync()
 }
