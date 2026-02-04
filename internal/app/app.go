@@ -64,8 +64,7 @@ func New(ctx context.Context) (*App, error) {
 	// Initialize HTTP server (after dependencies are ready)
 	app.initHTTPServer()
 
-	// Setup routers (must be after HTTP server init)
-	app.setupRouters()
+	router.RegisterRoutes(app.Echo, app.Handlers)
 
 	app.Logger.Info("Application initialized successfully")
 	return app, nil
@@ -156,11 +155,4 @@ func (a *App) wireDependencies() error {
 
 	a.Logger.Info("Dependencies wired successfully")
 	return nil
-}
-
-// setupRouters initializes and sets up all routers
-func (a *App) setupRouters() {
-	routerGroup := router.NewRouterGroup(a.Echo, a.Handlers)
-	routerGroup.Setup()
-	a.Logger.Info("Routers initialized")
 }

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"net/http"
 	"time"
 
 	"trading-stock/pkg/logger"
@@ -18,6 +19,9 @@ func (a *App) initHTTPServer() {
 	e.HidePort = true
 
 	// Configure middleware
+	e.GET("/health", func(c echo.Context) error {
+		return c.JSON(http.StatusOK, map[string]string{"status": "healthy"})
+	})
 	e.Use(middleware.RequestID())
 	e.Use(logger.ZapLogger(a.Logger)) // Use Zap logger from logger package
 	e.Use(middleware.Recover())

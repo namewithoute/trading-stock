@@ -21,8 +21,8 @@ type Router struct {
 	handlers *handler.HandlerGroup
 }
 
-// NewV1Router creates a new v1 router with handler group
-func NewV1Router(e *echo.Echo, handlers *handler.HandlerGroup) *Router {
+// NewV2Router creates a new v2 router with handler group
+func NewV2Router(e *echo.Echo, handlers *handler.HandlerGroup) *Router {
 	return &Router{
 		echo:     e,
 		handlers: handlers,
@@ -35,10 +35,10 @@ type SubRouter interface {
 }
 
 func (r *Router) Setup() {
-	v1 := r.echo.Group("/api/v1")
+	v1 := r.echo.Group("/api/v2")
 
-	public := v1.Group("")
-	protected := v1.Group("", middleware.AuthMiddleware())
+	public := v1.Group("/public")
+	protected := v1.Group("/private", middleware.AuthMiddleware())
 
 	subRouters := []SubRouter{
 		auth.NewAuthRouter(r.handlers.AuthHandler),
