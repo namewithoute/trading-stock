@@ -6,34 +6,34 @@ import (
 
 // RiskLimit represents risk limits for an account or user
 type RiskLimit struct {
-	ID        string `json:"id" gorm:"primaryKey;type:uuid"`
-	AccountID string `json:"account_id" gorm:"type:uuid;uniqueIndex;not null"`
-	UserID    string `json:"user_id" gorm:"type:uuid;index;not null"`
+	ID        string
+	AccountID string
+	UserID    string
 
 	// Position limits
-	MaxPositionSize   int     `json:"max_position_size" gorm:"not null;default:10000"`
-	MaxPositionValue  float64 `json:"max_position_value" gorm:"type:decimal(20,2);not null;default:100000"`
-	MaxPositionsCount int     `json:"max_positions_count" gorm:"not null;default:50"`
+	MaxPositionSize   int
+	MaxPositionValue  float64
+	MaxPositionsCount int
 
 	// Order limits
-	MaxOrderSize   int     `json:"max_order_size" gorm:"not null;default:1000"`
-	MaxOrderValue  float64 `json:"max_order_value" gorm:"type:decimal(20,2);not null;default:50000"`
-	MaxDailyOrders int     `json:"max_daily_orders" gorm:"not null;default:100"`
+	MaxOrderSize   int
+	MaxOrderValue  float64
+	MaxDailyOrders int
 
 	// Loss limits
-	MaxDailyLoss   float64 `json:"max_daily_loss" gorm:"type:decimal(20,2);not null;default:5000"`
-	MaxWeeklyLoss  float64 `json:"max_weekly_loss" gorm:"type:decimal(20,2);not null;default:20000"`
-	MaxMonthlyLoss float64 `json:"max_monthly_loss" gorm:"type:decimal(20,2);not null;default:50000"`
+	MaxDailyLoss   float64
+	MaxWeeklyLoss  float64
+	MaxMonthlyLoss float64
 
 	// Leverage limits
-	MaxLeverage float64 `json:"max_leverage" gorm:"type:decimal(10,2);not null;default:1.0"`
+	MaxLeverage float64
 
 	// Concentration limits
-	MaxConcentration float64 `json:"max_concentration" gorm:"type:decimal(5,2);not null;default:0.25"` // 25% max per position
+	MaxConcentration float64 // 25% max per position
 
-	Status    LimitStatus `json:"status" gorm:"type:varchar(20);not null;default:'ACTIVE'"`
-	CreatedAt time.Time   `json:"created_at" gorm:"not null"`
-	UpdatedAt time.Time   `json:"updated_at" gorm:"not null"`
+	Status    LimitStatus
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // IsActive checks if the risk limit is active
@@ -63,37 +63,37 @@ func (rl *RiskLimit) CheckOrderValue(value float64) bool {
 
 // RiskMetrics represents current risk metrics for an account
 type RiskMetrics struct {
-	ID        string `json:"id" gorm:"primaryKey;type:uuid"`
-	AccountID string `json:"account_id" gorm:"type:uuid;uniqueIndex;not null"`
-	UserID    string `json:"user_id" gorm:"type:uuid;index;not null"`
+	ID        string
+	AccountID string
+	UserID    string
 
 	// Current exposure
-	TotalExposure float64 `json:"total_exposure" gorm:"type:decimal(20,2);not null;default:0"`
-	LongExposure  float64 `json:"long_exposure" gorm:"type:decimal(20,2);not null;default:0"`
-	ShortExposure float64 `json:"short_exposure" gorm:"type:decimal(20,2);not null;default:0"`
+	TotalExposure float64
+	LongExposure  float64
+	ShortExposure float64
 
 	// Position metrics
-	PositionsCount     int     `json:"positions_count" gorm:"not null;default:0"`
-	LargestPosition    float64 `json:"largest_position" gorm:"type:decimal(20,2);not null;default:0"`
-	ConcentrationRatio float64 `json:"concentration_ratio" gorm:"type:decimal(5,4);not null;default:0"`
+	PositionsCount     int
+	LargestPosition    float64
+	ConcentrationRatio float64
 
 	// P&L metrics
-	DailyPnL   float64 `json:"daily_pnl" gorm:"type:decimal(20,2);not null;default:0"`
-	WeeklyPnL  float64 `json:"weekly_pnl" gorm:"type:decimal(20,2);not null;default:0"`
-	MonthlyPnL float64 `json:"monthly_pnl" gorm:"type:decimal(20,2);not null;default:0"`
+	DailyPnL   float64
+	WeeklyPnL  float64
+	MonthlyPnL float64
 
 	// Order metrics
-	DailyOrdersCount int `json:"daily_orders_count" gorm:"not null;default:0"`
+	DailyOrdersCount int
 
 	// Leverage
-	CurrentLeverage float64 `json:"current_leverage" gorm:"type:decimal(10,2);not null;default:0"`
+	CurrentLeverage float64
 
 	// Risk score (0-100, higher = riskier)
-	RiskScore int `json:"risk_score" gorm:"not null;default:0"`
+	RiskScore int
 
-	LastCalculatedAt time.Time `json:"last_calculated_at" gorm:"not null"`
-	CreatedAt        time.Time `json:"created_at" gorm:"not null"`
-	UpdatedAt        time.Time `json:"updated_at" gorm:"not null"`
+	LastCalculatedAt time.Time
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 // CalculateRiskScore calculates a risk score based on current metrics
@@ -150,16 +150,16 @@ func (rm *RiskMetrics) IsMediumRisk() bool {
 
 // RiskAlert represents a risk alert/violation
 type RiskAlert struct {
-	ID         string      `json:"id" gorm:"primaryKey;type:uuid"`
-	AccountID  string      `json:"account_id" gorm:"type:uuid;index;not null"`
-	UserID     string      `json:"user_id" gorm:"type:uuid;index;not null"`
-	AlertType  AlertType   `json:"alert_type" gorm:"type:varchar(50);not null"`
-	Severity   Severity    `json:"severity" gorm:"type:varchar(20);not null"`
-	Message    string      `json:"message" gorm:"type:text;not null"`
-	Details    string      `json:"details,omitempty" gorm:"type:jsonb"`
-	Status     AlertStatus `json:"status" gorm:"type:varchar(20);not null"`
-	ResolvedAt *time.Time  `json:"resolved_at,omitempty"`
-	CreatedAt  time.Time   `json:"created_at" gorm:"not null;index"`
+	ID         string
+	AccountID  string
+	UserID     string
+	AlertType  AlertType
+	Severity   Severity
+	Message    string
+	Details    string
+	Status     AlertStatus
+	ResolvedAt *time.Time
+	CreatedAt  time.Time
 }
 
 // IsResolved checks if the alert has been resolved

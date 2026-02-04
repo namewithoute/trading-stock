@@ -5,30 +5,25 @@ import "time"
 // Account represents a trading account entity
 // A user can have multiple accounts (e.g., cash account, margin account)
 type Account struct {
-	ID          string      `json:"id" gorm:"primaryKey;type:uuid"`
-	UserID      string      `json:"user_id" gorm:"type:uuid;index;not null"`
-	AccountType AccountType `json:"account_type" gorm:"type:varchar(20);not null"`
+	ID          string
+	UserID      string
+	AccountType AccountType
 
 	// Balance information
-	Balance     float64 `json:"balance" gorm:"type:decimal(20,2);not null;default:0"`
-	BuyingPower float64 `json:"buying_power" gorm:"type:decimal(20,2);not null;default:0"`
-	Currency    string  `json:"currency" gorm:"type:varchar(3);not null;default:'USD'"`
+	Balance     float64
+	BuyingPower float64
+	Currency    string
 
 	// Margin account specific (only for margin accounts)
-	MarginUsed      float64 `json:"margin_used,omitempty" gorm:"type:decimal(20,2);default:0"`
-	MarginAvailable float64 `json:"margin_available,omitempty" gorm:"type:decimal(20,2);default:0"`
+	MarginUsed      float64
+	MarginAvailable float64
 
 	// Status
-	Status Status `json:"status" gorm:"type:varchar(20);not null"`
+	Status Status
 
 	// Timestamps
-	CreatedAt time.Time `json:"created_at" gorm:"not null"`
-	UpdatedAt time.Time `json:"updated_at" gorm:"not null"`
-}
-
-// TableName specifies the table name for GORM
-func (Account) TableName() string {
-	return "accounts"
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // IsActive checks if the account is active

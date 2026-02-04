@@ -6,17 +6,17 @@ import (
 
 // Trade represents an executed trade between a buyer and seller
 type Trade struct {
-	ID          string      `json:"id" gorm:"primaryKey;type:uuid"`
-	BuyOrderID  string      `json:"buy_order_id" gorm:"type:uuid;index;not null"`
-	SellOrderID string      `json:"sell_order_id" gorm:"type:uuid;index;not null"`
-	Symbol      string      `json:"symbol" gorm:"type:varchar(10);index;not null"`
-	Price       float64     `json:"price" gorm:"type:decimal(20,4);not null"`
-	Quantity    int         `json:"quantity" gorm:"not null"`
-	BuyerID     string      `json:"buyer_id" gorm:"type:uuid;index;not null"`
-	SellerID    string      `json:"seller_id" gorm:"type:uuid;index;not null"`
-	Status      TradeStatus `json:"status" gorm:"type:varchar(20);not null"`
-	SettledAt   *time.Time  `json:"settled_at,omitempty"`
-	CreatedAt   time.Time   `json:"created_at" gorm:"not null"`
+	ID          string
+	BuyOrderID  string
+	SellOrderID string
+	Symbol      string
+	Price       float64
+	Quantity    int
+	BuyerID     string
+	SellerID    string
+	Status      TradeStatus
+	SettledAt   *time.Time
+	CreatedAt   time.Time
 }
 
 // TotalValue returns the total value of the trade
@@ -58,18 +58,18 @@ func (t *Trade) Fail() error {
 
 // Settlement represents the settlement of a trade
 type Settlement struct {
-	ID              string           `json:"id" gorm:"primaryKey;type:uuid"`
-	TradeID         string           `json:"trade_id" gorm:"type:uuid;uniqueIndex;not null"`
-	BuyerAccountID  string           `json:"buyer_account_id" gorm:"type:uuid;index;not null"`
-	SellerAccountID string           `json:"seller_account_id" gorm:"type:uuid;index;not null"`
-	Symbol          string           `json:"symbol" gorm:"type:varchar(10);not null"`
-	Quantity        int              `json:"quantity" gorm:"not null"`
-	Amount          float64          `json:"amount" gorm:"type:decimal(20,2);not null"`
-	Status          SettlementStatus `json:"status" gorm:"type:varchar(20);not null"`
-	SettledAt       *time.Time       `json:"settled_at,omitempty"`
-	FailureReason   string           `json:"failure_reason,omitempty" gorm:"type:text"`
-	CreatedAt       time.Time        `json:"created_at" gorm:"not null"`
-	UpdatedAt       time.Time        `json:"updated_at" gorm:"not null"`
+	ID              string
+	TradeID         string
+	BuyerAccountID  string
+	SellerAccountID string
+	Symbol          string
+	Quantity        int
+	Amount          float64
+	Status          SettlementStatus
+	SettledAt       *time.Time
+	FailureReason   string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 // IsCompleted checks if settlement is completed
@@ -111,19 +111,19 @@ func (s *Settlement) Fail(reason string) error {
 
 // ClearingInstruction represents instructions for clearing a trade
 type ClearingInstruction struct {
-	ID              string            `json:"id" gorm:"primaryKey;type:uuid"`
-	TradeID         string            `json:"trade_id" gorm:"type:uuid;index;not null"`
-	InstructionType ClearingType      `json:"instruction_type" gorm:"type:varchar(20);not null"`
-	FromAccountID   string            `json:"from_account_id" gorm:"type:uuid;not null"`
-	ToAccountID     string            `json:"to_account_id" gorm:"type:uuid;not null"`
-	AssetType       AssetType         `json:"asset_type" gorm:"type:varchar(20);not null"`
-	AssetSymbol     string            `json:"asset_symbol,omitempty" gorm:"type:varchar(10)"`
-	Amount          float64           `json:"amount" gorm:"type:decimal(20,2);not null"`
-	Quantity        int               `json:"quantity,omitempty"`
-	Status          InstructionStatus `json:"status" gorm:"type:varchar(20);not null"`
-	ExecutedAt      *time.Time        `json:"executed_at,omitempty"`
-	FailureReason   string            `json:"failure_reason,omitempty" gorm:"type:text"`
-	CreatedAt       time.Time         `json:"created_at" gorm:"not null"`
+	ID              string
+	TradeID         string
+	InstructionType ClearingType
+	FromAccountID   string
+	ToAccountID     string
+	AssetType       AssetType
+	AssetSymbol     string
+	Amount          float64
+	Quantity        int
+	Status          InstructionStatus
+	ExecutedAt      *time.Time
+	FailureReason   string
+	CreatedAt       time.Time
 }
 
 // IsExecuted checks if the instruction has been executed

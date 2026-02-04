@@ -6,13 +6,13 @@ import (
 	"time"
 
 	"trading-stock/internal/config"
-	"trading-stock/internal/domain/account"
-	"trading-stock/internal/domain/execution"
-	"trading-stock/internal/domain/market"
-	"trading-stock/internal/domain/order"
-	"trading-stock/internal/domain/portfolio"
-	"trading-stock/internal/domain/risk"
-	"trading-stock/internal/domain/user"
+	infraAccount "trading-stock/internal/infra/account"
+	infraExecution "trading-stock/internal/infra/execution"
+	infraMarket "trading-stock/internal/infra/market"
+	infraOrder "trading-stock/internal/infra/order"
+	infraPortfolio "trading-stock/internal/infra/portfolio"
+	infraRisk "trading-stock/internal/infra/risk"
+	infraUser "trading-stock/internal/infra/user"
 	"trading-stock/pkg/utils"
 
 	"go.uber.org/zap"
@@ -89,34 +89,34 @@ func InitPostgresDB(ctx context.Context, cfg config.DatabaseConfig, log *zap.Log
 func AutoMigrateModels(db *gorm.DB, log *zap.Logger) error {
 	log.Info("Starting database migrations...")
 
-	// List of all domain models to migrate
+	// List of all persistence models to migrate
 	models := []interface{}{
-		// User domain
-		&user.User{},
+		// User
+		&infraUser.UserModel{},
 
-		// Account domain
-		&account.Account{},
+		// Account
+		&infraAccount.AccountModel{},
 
-		// Order domain
-		&order.Order{},
+		// Order
+		&infraOrder.OrderModel{},
 
-		// Portfolio domain
-		&portfolio.Position{},
+		// Portfolio
+		&infraPortfolio.PositionModel{},
 
-		// Market domain
-		&market.Stock{},
-		&market.Price{},
-		&market.Candle{},
+		// Market
+		&infraMarket.StockModel{},
+		&infraMarket.PriceModel{},
+		&infraMarket.CandleModel{},
 
-		// Execution domain
-		&execution.Trade{},
-		&execution.Settlement{},
-		&execution.ClearingInstruction{},
+		// Execution
+		&infraExecution.TradeModel{},
+		&infraExecution.SettlementModel{},
+		&infraExecution.ClearingInstructionModel{},
 
-		// Risk domain
-		&risk.RiskLimit{},
-		&risk.RiskMetrics{},
-		&risk.RiskAlert{},
+		// Risk
+		&infraRisk.RiskLimitModel{},
+		&infraRisk.RiskMetricsModel{},
+		&infraRisk.RiskAlertModel{},
 	}
 
 	// Run migrations

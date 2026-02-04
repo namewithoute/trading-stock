@@ -4,30 +4,25 @@ import "time"
 
 // User represents a user entity in the trading system
 type User struct {
-	ID       string `json:"id" gorm:"primaryKey;type:uuid"`
-	Email    string `json:"email" gorm:"uniqueIndex;type:varchar(255);not null"`
-	Username string `json:"username" gorm:"uniqueIndex;type:varchar(100);not null"`
-	Password string `json:"-" gorm:"type:varchar(255);not null"` // Never expose in JSON
+	ID       string
+	Email    string
+	Username string
+	Password string // Never expose in JSON via DTOs
 
 	// Profile information
-	FirstName string `json:"first_name" gorm:"type:varchar(100)"`
-	LastName  string `json:"last_name" gorm:"type:varchar(100)"`
-	Phone     string `json:"phone" gorm:"type:varchar(20)"`
+	FirstName string
+	LastName  string
+	Phone     string
 
 	// Status and verification
-	Status        Status    `json:"status" gorm:"type:varchar(20);not null"`
-	EmailVerified bool      `json:"email_verified" gorm:"default:false"`
-	KYCStatus     KYCStatus `json:"kyc_status" gorm:"type:varchar(20);default:'PENDING'"`
+	Status        Status
+	EmailVerified bool
+	KYCStatus     KYCStatus
 
 	// Timestamps
-	CreatedAt time.Time  `json:"created_at" gorm:"not null"`
-	UpdatedAt time.Time  `json:"updated_at" gorm:"not null"`
-	LastLogin *time.Time `json:"last_login,omitempty"`
-}
-
-// TableName specifies the table name for GORM
-func (User) TableName() string {
-	return "users"
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	LastLogin *time.Time
 }
 
 // IsActive checks if the user account is active

@@ -5,28 +5,21 @@ import "time"
 // Order represents a trading order entity
 // This is the investor's intention to buy or sell a security
 type Order struct {
-	ID        string    `json:"id" gorm:"primaryKey;type:uuid"`
-	UserID    string    `json:"user_id" gorm:"type:uuid;index;not null"`
-	AccountID string    `json:"account_id" gorm:"type:uuid;index"` // Link to trading account
-	Symbol    string    `json:"symbol" gorm:"type:varchar(10);index;not null"`
-	Price     float64   `json:"price" gorm:"type:decimal(20,4);not null"`
-	Quantity  int       `json:"quantity" gorm:"not null"`
-	Side      Side      `json:"side" gorm:"type:varchar(4);not null"`
-	Type      OrderType `json:"order_type" gorm:"type:varchar(20);not null"`
-	Status    Status    `json:"status" gorm:"type:varchar(20);index;not null"`
+	ID        string
+	UserID    string
+	AccountID string
+	Symbol    string
+	Price     float64
+	Quantity  int
+	Side      Side
+	Type      OrderType
+	Status    Status
 
-	// Execution tracking
-	FilledQuantity int     `json:"filled_quantity" gorm:"default:0"`
-	AvgFillPrice   float64 `json:"avg_fill_price" gorm:"type:decimal(20,4)"`
+	FilledQuantity int
+	AvgFillPrice   float64
 
-	// Timestamps
-	CreatedAt time.Time `json:"created_at" gorm:"not null"`
-	UpdatedAt time.Time `json:"updated_at" gorm:"not null"`
-}
-
-// TableName specifies the table name for GORM
-func (Order) TableName() string {
-	return "orders"
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // IsFullyFilled checks if the order is completely filled

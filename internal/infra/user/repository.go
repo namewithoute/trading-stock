@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"trading-stock/internal/domain/user"
+	domain "trading-stock/internal/domain/user"
 
 	"gorm.io/gorm"
 )
@@ -16,18 +16,18 @@ type userRepository struct {
 }
 
 // NewUserRepository creates a new user repository
-func NewUserRepository(db *gorm.DB) user.Repository {
+func NewUserRepository(db *gorm.DB) domain.Repository {
 	return &userRepository{db: db}
 }
 
 // Create creates a new user
-func (r *userRepository) Create(ctx context.Context, u *user.User) error {
-	return r.db.WithContext(ctx).Create(u).Error
+func (r *userRepository) Create(ctx context.Context, u *domain.User) error {
+	return r.db.WithContext(ctx).Create(toUserModel(u)).Error
 }
 
 // GetByID retrieves a user by their ID
-func (r *userRepository) GetByID(ctx context.Context, id string) (*user.User, error) {
-	var u user.User
+func (r *userRepository) GetByID(ctx context.Context, id string) (*domain.User, error) {
+	var u UserModel
 	err := r.db.WithContext(ctx).Where("id = ?", id).First(&u).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -35,12 +35,12 @@ func (r *userRepository) GetByID(ctx context.Context, id string) (*user.User, er
 		}
 		return nil, err
 	}
-	return &u, nil
+	return u.toDomain(), nil
 }
 
 // GetByEmail retrieves a user by their email address
-func (r *userRepository) GetByEmail(ctx context.Context, email string) (*user.User, error) {
-	var u user.User
+func (r *userRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
+	var u UserModel
 	err := r.db.WithContext(ctx).Where("email = ?", email).First(&u).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -48,12 +48,12 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*user.Us
 		}
 		return nil, err
 	}
-	return &u, nil
+	return u.toDomain(), nil
 }
 
 // GetByUsername retrieves a user by their username
-func (r *userRepository) GetByUsername(ctx context.Context, username string) (*user.User, error) {
-	var u user.User
+func (r *userRepository) GetByUsername(ctx context.Context, username string) (*domain.User, error) {
+	var u UserModel
 	err := r.db.WithContext(ctx).Where("username = ?", username).First(&u).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -61,27 +61,27 @@ func (r *userRepository) GetByUsername(ctx context.Context, username string) (*u
 		}
 		return nil, err
 	}
-	return &u, nil
+	return u.toDomain(), nil
 }
 
 // Update updates an existing user
-func (r *userRepository) Update(ctx context.Context, u *user.User) error {
-	return r.db.WithContext(ctx).Save(u).Error
+func (r *userRepository) Update(ctx context.Context, u *domain.User) error {
+	return r.db.WithContext(ctx).Save(toUserModel(u)).Error
 }
 
 // UpdateStatus updates the user's status
-func (r *userRepository) UpdateStatus(ctx context.Context, id string, status user.Status) error {
+func (r *userRepository) UpdateStatus(ctx context.Context, id string, status domain.Status) error {
 	return r.db.WithContext(ctx).
-		Model(&user.User{}).
+		Model(&UserModel{}).
 		Where("id = ?", id).
 		Update("status", status).
 		Error
 }
 
 // UpdateKYCStatus updates the user's KYC status
-func (r *userRepository) UpdateKYCStatus(ctx context.Context, id string, kycStatus user.KYCStatus) error {
+func (r *userRepository) UpdateKYCStatus(ctx context.Context, id string, kycStatus domain.KYCStatus) error {
 	return r.db.WithContext(ctx).
-		Model(&user.User{}).
+		Model(&UserModel{}).
 		Where("id = ?", id).
 		Update("kyc_status", kycStatus).
 		Error
@@ -91,7 +91,7 @@ func (r *userRepository) UpdateKYCStatus(ctx context.Context, id string, kycStat
 func (r *userRepository) UpdateLastLogin(ctx context.Context, id string) error {
 	now := time.Now()
 	return r.db.WithContext(ctx).
-		Model(&user.User{}).
+		Model(&UserModel{}).
 		Where("id = ?", id).
 		Update("last_login", &now).
 		Error
@@ -100,27 +100,38 @@ func (r *userRepository) UpdateLastLogin(ctx context.Context, id string) error {
 // Delete soft deletes a user (sets status to INACTIVE)
 func (r *userRepository) Delete(ctx context.Context, id string) error {
 	return r.db.WithContext(ctx).
-		Model(&user.User{}).
+		Model(&UserModel{}).
 		Where("id = ?", id).
-		Update("status", user.StatusInactive).
+		Update("status", domain.StatusInactive).
 		Error
 }
 
 // List retrieves all users with pagination
-func (r *userRepository) List(ctx context.Context, limit, offset int) ([]user.User, error) {
-	var users []user.User
+func (r *userRepository) List(ctx context.Context, limit, offset int) ([]domain.User, error) {
+	var models []UserModel
 	err := r.db.WithContext(ctx).
 		Limit(limit).
 		Offset(offset).
 		Order("created_at DESC").
-		Find(&users).Error
-	return users, err
+		Find(&models).Error
+	if err != nil {
+		return nil, err
+	}
+
+	users := make([]domain.User, 0, len(models))
+	for i := range models {
+		u := models[i].toDomain()
+		if u != nil {
+			users = append(users, *u)
+		}
+	}
+	return users, nil
 }
 
 // Count returns the total number of users
 func (r *userRepository) Count(ctx context.Context) (int64, error) {
 	var count int64
-	err := r.db.WithContext(ctx).Model(&user.User{}).Count(&count).Error
+	err := r.db.WithContext(ctx).Model(&UserModel{}).Count(&count).Error
 	return count, err
 }
 
@@ -128,7 +139,7 @@ func (r *userRepository) Count(ctx context.Context) (int64, error) {
 func (r *userRepository) ExistsByEmail(ctx context.Context, email string) (bool, error) {
 	var count int64
 	err := r.db.WithContext(ctx).
-		Model(&user.User{}).
+		Model(&UserModel{}).
 		Where("email = ?", email).
 		Count(&count).Error
 	return count > 0, err
@@ -138,7 +149,7 @@ func (r *userRepository) ExistsByEmail(ctx context.Context, email string) (bool,
 func (r *userRepository) ExistsByUsername(ctx context.Context, username string) (bool, error) {
 	var count int64
 	err := r.db.WithContext(ctx).
-		Model(&user.User{}).
+		Model(&UserModel{}).
 		Where("username = ?", username).
 		Count(&count).Error
 	return count > 0, err
