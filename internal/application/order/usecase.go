@@ -3,7 +3,9 @@ package order
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
+	"trading-stock/internal/domain/account"
 	"trading-stock/internal/domain/order"
 
 	"github.com/google/uuid"
@@ -13,42 +15,27 @@ import (
 
 // UseCase handles order business logic
 type UseCase interface {
-	CreateOrder(ctx context.Context, userID string, data map[string]interface{}) (*order.Order, error)
-	ListOrders(ctx context.Context, userID string) ([]*order.Order, error)
+	CreateOrder(ctx context.Context, userID, accountID, symbol, side, orderType string, price float64, quantity int) (*order.Order, error)
+	ListOrders(ctx context.Context, userID, symbol, status string, limit, offset int) ([]*order.Order, error)
 	GetOrder(ctx context.Context, id string) (*order.Order, error)
 	CancelOrder(ctx context.Context, id string) error
 }
 
 type useCase struct {
-	orderRepo order.Repository
-	kafka     *kafka.Writer
-	logger    *zap.Logger
+	orderRepo   order.Repository
+	accountRepo account.Repository
+	kafka       *kafka.Writer
+	logger      *zap.Logger
 }
 
-func NewUseCase(orderRepo order.Repository, kafka *kafka.Writer, logger *zap.Logger) UseCase {
-	return &useCase{orderRepo: orderRepo, kafka: kafka, logger: logger}
+func NewUseCase(orderRepo order.Repository, accountRepo account.Repository, kafka *kafka.Writer, logger *zap.Logger) UseCase {
+	return &useCase{orderRepo: orderRepo, accountRepo: accountRepo, kafka: kafka, logger: logger}
 }
 
-func (s *useCase) CreateOrder(ctx context.Context, userID string, data map[string]interface{}) (*order.Order, error) {
-	symbol, _ := data["symbol"].(string)
-	accountID, _ := data["account_id"].(string)
-	side, _ := data["side"].(string)
-	orderType, _ := data["order_type"].(string)
-
-	var price float64
-	if p, ok := data["price"].(float64); ok {
-		price = p
-	}
-
-	var quantity int
-	if q, ok := data["quantity"].(float64); ok {
-		quantity = int(q)
-	}
-
+func (s *useCase) CreateOrder(ctx context.Context, userID, accountID, symbol, side, orderType string, price float64, quantity int) (*order.Order, error) {
 	o := &order.Order{
 		ID:        uuid.New().String(),
 		UserID:    userID,
-		AccountID: accountID,
 		Symbol:    symbol,
 		Price:     price,
 		Quantity:  quantity,
@@ -59,15 +46,45 @@ func (s *useCase) CreateOrder(ctx context.Context, userID string, data map[strin
 		UpdatedAt: time.Now(),
 	}
 
+	// [Business Rule] 1. Get primary account if accountID is not provided
+	if accountID == "" {
+		acc, err := s.accountRepo.GetPrimaryAccount(ctx, userID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get user account: %w", err)
+		}
+		o.AccountID = acc.ID
+	} else {
+		o.AccountID = accountID
+	}
+
+	// [Business Rule] 2. Lock Balance / Reserve Funds for BUY orders
+	if o.Side == order.SideBuy {
+		totalCost := float64(o.Quantity) * o.Price // If Market order, price logic might differ
+		err := s.accountRepo.ReserveFunds(ctx, o.AccountID, totalCost)
+		if err != nil {
+			// e.g. ErrInsufficientBuyingPower
+			return nil, fmt.Errorf("failed to reserve funds: %w", err)
+		}
+		s.logger.Info("Funds reserved for order", zap.String("orderID", o.ID), zap.Float64("amount", totalCost))
+	} else if o.Side == order.SideSell {
+		// For SELL orders, we need to check if user has enough Portfolio stock!
+		// Leaving this open for future implementation (needs portfolioRepo injection)
+	}
+
 	if err := s.orderRepo.Create(ctx, o); err != nil {
 		s.logger.Error("Failed to create order in repo", zap.Error(err))
+		// [Rollback Rule] Must release funds if DB insert fails!
+		if o.Side == order.SideBuy {
+			_ = s.accountRepo.ReleaseFunds(ctx, o.AccountID, float64(o.Quantity)*o.Price)
+		}
 		return nil, err
 	}
 
 	// Send to Kafka for matching engine
 	orderJSON, _ := json.Marshal(o)
 	err := s.kafka.WriteMessages(ctx, kafka.Message{
-		Key:   []byte(o.ID),
+		Topic: "orders.matching.new",
+		Key:   []byte(o.Symbol),
 		Value: orderJSON,
 	})
 	if err != nil {
@@ -79,8 +96,8 @@ func (s *useCase) CreateOrder(ctx context.Context, userID string, data map[strin
 	return o, nil
 }
 
-func (s *useCase) ListOrders(ctx context.Context, userID string) ([]*order.Order, error) {
-	return s.orderRepo.ListByUserID(ctx, userID, 20, 0)
+func (s *useCase) ListOrders(ctx context.Context, userID, symbol, status string, limit, offset int) ([]*order.Order, error) {
+	return s.orderRepo.ListOrdersByUserIDAndSymbolAndStatus(ctx, userID, symbol, status, limit, offset)
 }
 
 func (s *useCase) GetOrder(ctx context.Context, id string) (*order.Order, error) {

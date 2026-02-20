@@ -22,10 +22,10 @@ func (r *AdminRouter) RegisterPublicRoutes(g *echo.Group) {
 
 // Protected routes - cần auth + admin role
 func (r *AdminRouter) RegisterRoutes(g *echo.Group) {
-	// g đã là /api/v1/admin rồi
-	g.Group("/admin", middleware.RequireRole("admin"))
-	g.GET("/users", r.handler.ListUsers)          // GET /api/v1/admin/users
-	g.PUT("/users/:id/kyc", r.handler.ApproveKYC) // PUT /api/v1/admin/users/:id/kyc
-	g.GET("/orders", r.handler.ListAllOrders)     // GET /api/v1/admin/orders
-	g.GET("/stats", r.handler.GetSystemStats)     // GET /api/v1/admin/stats
+	adminGroup := g.Group("/admin", middleware.RequireRole("admin"))
+
+	adminGroup.GET("/users", r.handler.ListUsers)          // GET /api/v1/admin/users
+	adminGroup.PUT("/users/:id/kyc", r.handler.ApproveKYC) // PUT /api/v1/admin/users/:id/kyc
+	adminGroup.GET("/orders", r.handler.ListAllOrders)     // GET /api/v1/admin/orders
+	adminGroup.GET("/stats", r.handler.GetSystemStats)     // GET /api/v1/admin/stats
 }

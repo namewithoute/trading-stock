@@ -21,6 +21,8 @@ type Repository interface {
 	// Results are ordered by created_at DESC
 	ListByUserID(ctx context.Context, userID string, limit, offset int) ([]*Order, error)
 
+	ListOrdersByUserIDAndSymbolAndStatus(ctx context.Context, userID, symbol string, status string, limit, offset int) ([]*Order, error)
+
 	// ListByStatus retrieves all orders with a specific status
 	ListByStatus(ctx context.Context, status Status, limit, offset int) ([]*Order, error)
 

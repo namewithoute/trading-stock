@@ -1,8 +1,6 @@
 package application
 
 import (
-	"trading-stock/internal/domain"
-	"trading-stock/internal/domain/user"
 	"trading-stock/internal/application/account"
 	"trading-stock/internal/application/admin"
 	"trading-stock/internal/application/auth"
@@ -12,6 +10,8 @@ import (
 	"trading-stock/internal/application/portfolio"
 	"trading-stock/internal/application/risk"
 	userUC "trading-stock/internal/application/user"
+	"trading-stock/internal/domain"
+	"trading-stock/internal/domain/user"
 	"trading-stock/pkg/jwtservice"
 
 	"github.com/redis/go-redis/v9"
@@ -47,7 +47,7 @@ func NewUsecases(
 		Auth:      auth.NewUseCase(repos.User, hasher, jwtSvc, redis, logger),
 		User:      userUC.NewUseCase(repos.User, logger),
 		Account:   account.NewUseCase(repos.Account, logger),
-		Order:     order.NewUseCase(repos.Order, kafka, logger),
+		Order:     order.NewUseCase(repos.Order, repos.Account, kafka, logger),
 		Portfolio: portfolio.NewUseCase(repos.Portfolio, logger),
 		Market:    market.NewUseCase(repos.Stock, repos.Price, repos.Candle, redis, logger),
 		Trade:     execution.NewUseCase(repos.Trade, logger),

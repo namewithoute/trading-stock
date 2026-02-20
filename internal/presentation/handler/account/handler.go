@@ -24,6 +24,13 @@ func NewAccountHandler(AccountUseCase accountUC.UseCase) *AccountHandler {
 func (h *AccountHandler) VerifyAccountExists(c echo.Context) error {
 	accountNumber := c.Param("account_number")
 
+	if accountNumber == "" {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"message": "Account number is required",
+		})
+	}
+
+	
 	// TODO: Implement account verification logic
 	// 1. Get account number from URL param
 	// 2. Check if account exists in database

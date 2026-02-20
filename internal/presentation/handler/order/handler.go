@@ -26,26 +26,49 @@ func (h *OrderHandler) CreateOrder(c echo.Context) error {
 
 	// TODO: Implement create order logic
 	// 1. Get user ID from context
-	// 2. Parse request body (symbol, side, type, quantity, price)
-	// 3. Validate input (symbol exists, quantity > 0, etc.)
-	// 4. Check account balance
-	// 5. Create order in database
-	// 6. Send to matching engine (Kafka/RabbitMQ)
-	// 7. Return order info
+	var orderReq CreateOrderRequest
+	if err := c.Bind(&orderReq); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"message": "Invalid request body",
+			"error":   err.Error(),
+		})
+	}
 
-	return c.JSON(http.StatusCreated, map[string]interface{}{
-		"message": "Order created successfully",
-		"user_id": userID,
-		"data": map[string]interface{}{
-			"order_id":   "ord_001",
-			"symbol":     "VNM",
-			"side":       "buy",
-			"type":       "limit",
-			"quantity":   100,
-			"price":      85000,
-			"status":     "pending",
-			"created_at": "2024-01-01T10:00:00Z",
-		},
+	if orderReq.Symbol == "" || orderReq.Price == 0 || orderReq.Quantity == 0 || orderReq.Side == "" || orderReq.Type == "" {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"message": "Invalid request body",
+			"error":   "Invalid request body",
+		})
+	}
+
+	// Call UseCase
+	accountID := "" // Will let usecase handle getting the primary account natively
+	createdOrder, err := h.OrderUseCase.CreateOrder(
+		c.Request().Context(),
+		userID.(string),
+		accountID,
+		orderReq.Symbol,
+		orderReq.Side,
+		orderReq.Type,
+		orderReq.Price,
+		int(orderReq.Quantity),
+	)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"message": "Failed to create order",
+			"error":   err.Error(),
+		})
+	}
+
+	return c.JSON(http.StatusCreated, Order{
+		OrderID:   createdOrder.ID,
+		Symbol:    createdOrder.Symbol,
+		Side:      string(createdOrder.Side),
+		Type:      string(createdOrder.Type),
+		Quantity:  createdOrder.Quantity,
+		Price:     createdOrder.Price,
+		Status:    string(createdOrder.Status),
+		CreatedAt: createdOrder.CreatedAt,
 	})
 }
 
@@ -54,40 +77,64 @@ func (h *OrderHandler) CreateOrder(c echo.Context) error {
 func (h *OrderHandler) ListOrders(c echo.Context) error {
 	userID := c.Get("user_id")
 
-	// TODO: Implement list orders logic
-	// 1. Get user ID from context
-	// 2. Parse query params (status, symbol, page, limit)
-	// 3. Fetch orders from database with filters
-	// 4. Return paginated list
+	var listOrdersRequest ListOrdersRequest
+	if err := c.Bind(&listOrdersRequest); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"message": "Invalid request body",
+			"error":   err.Error(),
+		})
+	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message": "List orders - TODO: implement",
-		"user_id": userID,
-		"data": []map[string]interface{}{
-			{
-				"order_id":        "ord_001",
-				"symbol":          "VNM",
-				"side":            "buy",
-				"type":            "limit",
-				"quantity":        100,
-				"filled_quantity": 50,
-				"price":           85000,
-				"status":          "partial_filled",
-			},
-			{
-				"order_id":        "ord_002",
-				"symbol":          "HPG",
-				"side":            "sell",
-				"type":            "market",
-				"quantity":        200,
-				"filled_quantity": 200,
-				"status":          "filled",
-			},
-		},
-		"pagination": map[string]interface{}{
-			"page":  1,
-			"limit": 20,
-			"total": 2,
+	page := listOrdersRequest.Page
+	if page <= 0 {
+		page = 1
+	}
+	limit := listOrdersRequest.Limit
+	if limit <= 0 {
+		limit = 20
+	}
+	offset := (page - 1) * limit
+
+	orders, err := h.OrderUseCase.ListOrders(
+		c.Request().Context(),
+		userID.(string),
+		listOrdersRequest.Symbol,
+		listOrdersRequest.Status,
+		limit,
+		offset,
+	)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"message": "Failed to list orders",
+			"error":   err.Error(),
+		})
+	}
+
+	var dtoList []Order
+	for _, o := range orders {
+		dtoList = append(dtoList, Order{
+			OrderID:        o.ID,
+			Symbol:         o.Symbol,
+			Side:           string(o.Side),
+			Type:           string(o.Type),
+			Quantity:       o.Quantity,
+			FilledQuantity: o.FilledQuantity,
+			Price:          o.Price,
+			Status:         string(o.Status),
+			CreatedAt:      o.CreatedAt,
+		})
+	}
+
+	if dtoList == nil {
+		dtoList = make([]Order, 0)
+	}
+
+	return c.JSON(http.StatusOK, ListOrdersResponse{
+		Orders: dtoList,
+		Pagination: Pagination{
+			Page:  page,
+			Limit: limit,
+			Total: len(orders), // TODO: Add a real total count query instead of len(orders)
 		},
 	})
 }

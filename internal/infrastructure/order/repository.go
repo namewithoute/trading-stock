@@ -135,3 +135,21 @@ func (r *orderRepository) CountByUserID(ctx context.Context, userID string) (int
 func (r *orderRepository) Delete(ctx context.Context, id string) error {
 	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&OrderModel{}).Error
 }
+
+func (r *orderRepository) ListOrdersByUserIDAndSymbolAndStatus(ctx context.Context, userID, symbol string, status string, limit, offset int) ([]*domain.Order, error) {
+	var models []*OrderModel
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND symbol = ? AND status = ?", userID, symbol, status).
+		Limit(limit).
+		Offset(offset).
+		Order("created_at DESC").
+		Find(&models).Error
+	if err != nil {
+		return nil, err
+	}
+	orders := make([]*domain.Order, 0, len(models))
+	for _, m := range models {
+		orders = append(orders, m.toDomain())
+	}
+	return orders, nil
+}
