@@ -33,3 +33,9 @@ init:
     initial_interval: 1s
     max_interval: 5s
     multiplier: 2
+jwt:
+  access_secret: "dev-access-secret-change-in-production-32chars"
+  refresh_secret: "dev-refresh-secret-change-in-production-32chars"
+  access_ttl: "15m"
+  refresh_ttl: "168h"
+  issuer: "trading-stock"

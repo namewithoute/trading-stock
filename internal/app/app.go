@@ -1,17 +1,14 @@
-package app
+﻿package app
 
 import (
 	"context"
-	"fmt"
 	"time"
 
+	"trading-stock/internal/application"
 	"trading-stock/internal/config"
 	"trading-stock/internal/domain"
-	"trading-stock/internal/handler"
-	"trading-stock/internal/infra"
-	"trading-stock/internal/initialize"
-	"trading-stock/internal/router"
-	"trading-stock/internal/usecase"
+	"trading-stock/internal/presentation/handler"
+	"trading-stock/pkg/jwtservice"
 	"trading-stock/pkg/logger"
 
 	"github.com/labstack/echo/v4"
@@ -21,56 +18,65 @@ import (
 	"gorm.io/gorm"
 )
 
-// App is the main application container with all dependencies
+// App is the top-level composition root.
+// It owns all initialized dependencies and their lifecycle.
+//
+// Startup sequence:  New() → [config → logger → resources → wire → server]
+// Shutdown sequence: Shutdown() → [http → db → redis → kafka → logger.sync]
 type App struct {
 	Config *config.Config
 	Logger *zap.Logger
-	DB     *gorm.DB
-	Redis  *redis.Client
-	Kafka  *kafka.Writer
-	Echo   *echo.Echo
 
-	// Dependency injection
+	// External infrastructure connections
+	DB    *gorm.DB
+	Redis *redis.Client
+	Kafka *kafka.Writer
+
+	// HTTP server
+	Echo *echo.Echo
+
+	// DDD layers (wired in wire.go)
 	Repositories *domain.Repositories
-	Usecases     *usecase.Usecases
+	Usecases     *application.Usecases
 	Handlers     *handler.HandlerGroup
+	JWTService   jwtservice.Service
 }
 
-// New creates a new App instance with all dependencies initialized
+// New bootstraps the application in a strict, ordered sequence.
+// Any step failure returns immediately with a wrapped error.
 func New(ctx context.Context) (*App, error) {
-	app := &App{}
+	a := &App{}
 
-	// Load configuration
-	app.Config = config.Load()
+	// 1. Config — must be first; all other steps read from it
+	a.Config = config.Load()
 
-	// Initialize logger
-	if err := app.initLogger(); err != nil {
+	// 2. Logger — must exist before any error reporting
+	if err := a.initLogger(); err != nil {
 		return nil, err
 	}
 
-	// Initialize infrastructure (DB, Redis, Kafka)
-	initCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	// 3. External connections — enforce a hard startup deadline
+	resourceCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	if err := app.initResources(initCtx); err != nil {
+	if err := a.initResources(resourceCtx); err != nil {
 		return nil, err
 	}
 
-	// Wire dependencies (repositories, services, handlers)
-	if err := app.wireDependencies(); err != nil {
+	// 4. HTTP server — Echo must exist before routes are registered in wire()
+	a.initHTTPServer()
+
+	// 5. Dependency graph — wires repos, use cases, handlers, and routes onto a.Echo
+	if err := a.wire(); err != nil {
 		return nil, err
 	}
 
-	// Initialize HTTP server (after dependencies are ready)
-	app.initHTTPServer()
-
-	router.RegisterRoutes(app.Echo, app.Handlers)
-
-	app.Logger.Info("Application initialized successfully")
-	return app, nil
+	a.Logger.Info("Application ready to serve")
+	return a, nil
 }
 
-// initLogger initializes the logger
+// initLogger builds the structured logger from configuration.
+// Uses fmt as fallback since a.Logger is not yet available.
 func (a *App) initLogger() error {
 	cfg := a.Config.Logger
 
@@ -85,74 +91,10 @@ func (a *App) initLogger() error {
 		MaxAge:        cfg.MaxAge,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to initialize logger: %w", err)
+		return err
 	}
 
 	a.Logger = log
-	return nil
-}
-
-// initResources initializes all external dependencies
-func (a *App) initResources(ctx context.Context) error {
-	var err error
-
-	// Initialize PostgreSQL
-	a.DB, err = initialize.InitPostgresDB(ctx, a.Config.Database, a.Logger)
-	if err != nil {
-		return fmt.Errorf("postgres initialization failed: %w", err)
-	}
-
-	// Run database migrations
-	if err := initialize.AutoMigrateModels(a.DB, a.Logger); err != nil {
-		return fmt.Errorf("database migration failed: %w", err)
-	}
-
-	a.Logger.Info("PostgreSQL connected and migrated successfully")
-
-	// Initialize Redis
-	a.Redis, err = initialize.InitRedis(ctx, a.Config.Redis, a.Logger)
-	if err != nil {
-		return fmt.Errorf("redis initialization failed: %w", err)
-	}
-
-	a.Logger.Info("Redis connected successfully")
-
-	// Initialize Kafka
-	a.Kafka, err = initialize.InitKafka(ctx, a.Config.Kafka, a.Logger)
-	if err != nil {
-		return fmt.Errorf("kafka initialization failed: %w", err)
-	}
-
-	a.Logger.Info("Kafka connected successfully")
-
-	return nil
-}
-
-// wireDependencies wires up all dependencies (repositories, services, handlers)
-func (a *App) wireDependencies() error {
-	// ============================================
-	// REPOSITORIES
-	// ============================================
-	a.Repositories = infra.NewRepositories(a.DB)
-	a.Logger.Info("Infrastructure (Repositories) initialized")
-
-	// ============================================
-	// USE CASES (SERVICES)
-	// ============================================
-	a.Usecases = usecase.NewUsecases(
-		a.Repositories,
-		a.Redis,
-		a.Kafka,
-		a.Logger,
-	)
-	a.Logger.Info("Use cases (Services) initialized")
-
-	// ============================================
-	// HANDLERS
-	// ============================================
-	a.Handlers = handler.NewHandlerGroup(a.Usecases)
-	a.Logger.Info("Handlers initialized")
-
-	a.Logger.Info("Dependencies wired successfully")
+	a.Logger.Info("Logger initialized", zap.String("level", cfg.Level))
 	return nil
 }

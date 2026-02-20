@@ -14,6 +14,7 @@ type Config struct {
 	Kafka    KafkaConfig    `mapstructure:"kafka"`
 	Logger   LoggerConfig   `mapstructure:"logger"`
 	Init     InitConfig     `mapstructure:"init"`
+	JWT      JWTConfig      `mapstructure:"jwt"`
 }
 
 type InitConfig struct {
@@ -33,6 +34,7 @@ type AppConfig struct {
 	Port int    `mapstructure:"port"`
 	Env  string `mapstructure:"env"`
 }
+
 type DatabaseConfig struct {
 	Driver          string `mapstructure:"driver"`
 	Source          string `mapstructure:"source"`
@@ -40,6 +42,7 @@ type DatabaseConfig struct {
 	MaxOpenConns    int    `mapstructure:"max_open_conns"`
 	ConnMaxLifetime int    `mapstructure:"conn_max_lifetime"`
 }
+
 type RedisConfig struct {
 	Addr         string `mapstructure:"addr"`
 	Password     string `mapstructure:"password"`
@@ -47,11 +50,13 @@ type RedisConfig struct {
 	PoolSize     int    `mapstructure:"pool_size"`
 	MinIdleConns int    `mapstructure:"min_idle_conns"`
 }
+
 type KafkaConfig struct {
 	Brokers      []string `mapstructure:"brokers"`
 	BatchSize    int      `mapstructure:"batch_size"`
 	BatchTimeout int      `mapstructure:"batch_timeout"`
 }
+
 type LoggerConfig struct {
 	Level         string `mapstructure:"level"`
 	Director      string `mapstructure:"director"`
@@ -63,21 +68,34 @@ type LoggerConfig struct {
 	MaxAge        int    `mapstructure:"max_age"`
 }
 
-// Load reads metadata from a file or environment variables
+// JWTConfig holds secrets and TTL settings for JWT token generation.
+// Access tokens are short-lived; refresh tokens are long-lived.
+// NEVER commit real secrets to source control – use environment variables in production.
+type JWTConfig struct {
+	AccessSecret  string        `mapstructure:"access_secret"`
+	RefreshSecret string        `mapstructure:"refresh_secret"`
+	AccessTTL     time.Duration `mapstructure:"access_ttl"`  // e.g. "15m"
+	RefreshTTL    time.Duration `mapstructure:"refresh_ttl"` // e.g. "168h" (7 days)
+	Issuer        string        `mapstructure:"issuer"`
+}
+
+// Load reads configuration from a YAML file or environment variables.
 func Load() *Config {
 	v := viper.New()
-	v.SetConfigName("dev")  // Tên file config (không cần đuôi)
-	v.SetConfigType("yaml") // Hoặc json, env
-	v.AddConfigPath(".")    // Tìm ở thư mục root
+	v.SetConfigName("dev")
+	v.SetConfigType("yaml")
+	v.AddConfigPath(".")
 	v.AddConfigPath("./internal/configs")
-	// Đọc lệnh từ biến môi trường (Ví dụ: DB_SOURCE)
 	v.AutomaticEnv()
+
 	if err := v.ReadInConfig(); err != nil {
 		panic(fmt.Errorf("fatal error config file: %w", err))
 	}
+
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
-		panic(fmt.Errorf("unable to decode into struct, %v", err))
+		panic(fmt.Errorf("unable to decode into struct: %v", err))
 	}
+
 	return &cfg
 }

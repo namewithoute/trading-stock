@@ -34,6 +34,26 @@ const (
 	KYCRejected KYCStatus = "REJECTED" // KYC rejected
 )
 
+type Role string
+
+const (
+	RoleUser  Role = "USER"
+	RoleAdmin Role = "ADMIN"
+)
+
+func (r Role) IsValid() bool {
+	switch r {
+	case RoleUser, RoleAdmin:
+		return true
+	default:
+		return false
+	}
+}
+
+func (r Role) String() string {
+	return string(r)
+}
+
 // IsValid checks if the KYC status is valid
 func (k KYCStatus) IsValid() bool {
 	switch k {
@@ -47,4 +67,10 @@ func (k KYCStatus) IsValid() bool {
 // String returns the string representation of KYCStatus
 func (k KYCStatus) String() string {
 	return string(k)
+}
+
+// PasswordHasher interface giúp Domain không phụ thuộc vào thư viện cụ thể (như bcrypt)
+type PasswordHasher interface {
+	Hash(password string) (string, error)
+	Compare(hash, password string) bool
 }

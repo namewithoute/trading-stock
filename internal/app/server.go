@@ -17,6 +17,7 @@ func (a *App) initHTTPServer() {
 	// Hide Echo banner and port message
 	e.HideBanner = true
 	e.HidePort = true
+	e.HTTPErrorHandler = a.GlobalErrorHandler
 
 	// Configure middleware
 	e.GET("/health", func(c echo.Context) error {
