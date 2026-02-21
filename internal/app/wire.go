@@ -3,28 +3,34 @@ package app
 import (
 	"trading-stock/internal/application"
 	"trading-stock/internal/infrastructure"
+	infraAccount "trading-stock/internal/infrastructure/account"
 	infraUser "trading-stock/internal/infrastructure/user"
 	"trading-stock/internal/presentation/handler"
 	"trading-stock/internal/presentation/router"
 	"trading-stock/pkg/jwtservice"
 )
 
-// wire builds the entire in-process dependency graph.
+// wire builds the complete in-process dependency graph.
 //
-// Strict bottom-up DDD order:
+// ── Layer Order (bottom-up, strictly enforced) ───────────────────────────────
 //
-//	Infrastructure Layer (Repositories)
-//	↓
-//	Application Layer   (Use Cases / Services)
-//	↓
-//	Presentation Layer  (Handlers + Routes)
+//	Infrastructure  → builds concrete implementations of domain interfaces
+//	      ↓
+//	Application     → receives domain interfaces; zero infra imports
+//	      ↓
+//	Presentation    → receives application use cases; zero domain/infra imports
+//
+// ── DI Rule ──────────────────────────────────────────────────────────────────
+//
+//	wire.go is the ONLY file allowed to import infrastructure packages.
+//	All other layers communicate exclusively through interfaces.
 func (a *App) wire() error {
-	// ── Infrastructure Layer ──────────────────────────────────────────
-	a.Repositories = infrastructure.NewRepositories(a.DB)
-	a.Logger.Info("[ Infrastructure ] Repositories initialized")
 
-	// ── Shared Technical Services ─────────────────────────────────────
-	// These are cross-cutting utilities, not domain concepts.
+	// ── 1. Infrastructure Layer ───────────────────────────────────────
+	a.Repositories = infrastructure.NewRepositories(a.DB)
+	a.Logger.Info("[ Infrastructure ] Repositories initialised")
+
+	// Shared technical utilities (cross-cutting, NOT domain concepts)
 	hasher := infraUser.NewBcryptHasher()
 
 	a.JWTService = jwtservice.New(jwtservice.Config{
@@ -34,22 +40,46 @@ func (a *App) wire() error {
 		RefreshTTL:    a.Config.JWT.RefreshTTL,
 		Issuer:        a.Config.JWT.Issuer,
 	})
-	a.Logger.Info("[ Infrastructure ] JWT service initialized")
+	a.Logger.Info("[ Infrastructure ] JWT service initialised")
 
-	// ── Application Layer ─────────────────────────────────────────────
+	// ── 1b. Account Event Sourcing infrastructure ─────────────────────
+	// Build concrete EventSourcingService here — the ONLY place that
+	// knows about both Postgres EventStore and Kafka at once.
+	// Passed upward as domain.EventSourcingServicePort (interface).
+	accountEventSvc := infraAccount.NewEventSourcingService(
+		a.Repositories.AccountEventStore,
+		a.Kafka,
+		a.Logger,
+	)
+	a.Logger.Info("[ Infrastructure ] Account EventSourcing service initialised")
+
+	// ── 1c. Account Projector (Kafka consumer → read model) ───────────
+	// Build the Projector here so lifecycle.go can call Run(ctx) / stop.
+	a.AccountProjector = infraAccount.NewProjector(
+		a.Config.Kafka.Brokers,              // Kafka broker addresses from config
+		a.Repositories.AccountReadModelRepo, // ReadModelRepository domain interface
+		accountEventSvc,                     // needed to replay aggregate on each event
+		a.Logger,
+	)
+	a.Logger.Info("[ Infrastructure ] Account Projector initialised")
+
+	// ── 2. Application Layer ──────────────────────────────────────────
+	// All dependencies injected as domain-defined interfaces.
+	// NewUsecases has ZERO import from infrastructure packages.
 	a.Usecases = application.NewUsecases(
 		a.Repositories,
 		hasher,
 		a.JWTService,
 		a.Redis,
 		a.Kafka,
+		accountEventSvc, // injected as EventSourcingServicePort (domain interface)
 		a.Logger,
 	)
-	a.Logger.Info("[ Application ] Use cases initialized")
+	a.Logger.Info("[ Application ] Use cases initialised")
 
-	// ── Presentation Layer ────────────────────────────────────────────
-	a.Handlers = handler.NewHandlerGroup(a.Usecases)
-	a.Logger.Info("[ Presentation ] Handlers initialized")
+	// ── 3. Presentation Layer ─────────────────────────────────────────
+	a.Handlers = handler.NewHandlerGroup(a.Usecases, a.Logger)
+	a.Logger.Info("[ Presentation ] Handlers initialised")
 
 	router.RegisterRoutes(a.Echo, a.Handlers, a.JWTService)
 	a.Logger.Info("[ Presentation ] Routes registered")

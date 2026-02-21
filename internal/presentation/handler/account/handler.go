@@ -3,19 +3,24 @@
 import (
 	"net/http"
 	accountUC "trading-stock/internal/application/account"
+	"trading-stock/internal/domain/account"
+	"trading-stock/pkg/response"
 
 	"github.com/labstack/echo/v4"
+	"go.uber.org/zap"
 )
 
 // AccountHandler handles trading account endpoints
 type AccountHandler struct {
-	AccountUseCase accountUC.UseCase // Uncomment when service is ready
+	accountUseCase accountUC.UseCase // Uncomment when service is ready
+	logger         *zap.Logger
 }
 
 // NewAccountHandler creates a new account handler
-func NewAccountHandler(AccountUseCase accountUC.UseCase) *AccountHandler {
+func NewAccountHandler(accountUseCase accountUC.UseCase, logger *zap.Logger) *AccountHandler {
 	return &AccountHandler{
-		AccountUseCase: AccountUseCase,
+		accountUseCase: accountUseCase,
+		logger:         logger,
 	}
 }
 
@@ -25,22 +30,28 @@ func (h *AccountHandler) VerifyAccountExists(c echo.Context) error {
 	accountNumber := c.Param("account_number")
 
 	if accountNumber == "" {
-		return c.JSON(http.StatusBadRequest, map[string]interface{}{
-			"message": "Account number is required",
-		})
+		return response.Error(c, http.StatusBadRequest, "Account number is required", "account_number_empty")
 	}
 
-	
-	// TODO: Implement account verification logic
-	// 1. Get account number from URL param
-	// 2. Check if account exists in database
-	// 3. Return exists status (without sensitive info)
+	acc, err := h.accountUseCase.GetAccount(c.Request().Context(), accountNumber)
+	if err != nil {
+		h.logger.Error("Failed to get account", zap.Error(err))
+		return response.Error(c, http.StatusInternalServerError, "Failed to get account", err.Error())
+	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message":        "Account verification - TODO: implement",
-		"account_number": accountNumber,
-		"exists":         true,
-	})
+	if acc == nil {
+		h.logger.Error("Account not found", zap.String("account_number", accountNumber))
+		return response.Error(c, http.StatusNotFound, "Account not found", account.ErrAccountNotFound.Error())
+	}
+
+	if acc.Status != account.StatusActive {
+		h.logger.Error("Account is not active", zap.String("account_number", accountNumber))
+		return response.Error(c, http.StatusForbidden, "Account is not active", account.ErrAccountNotActive.Error())
+	}
+
+	accountResponse := ToAccountResponse(acc)
+
+	return response.Success(c, http.StatusOK, "Account verified successfully", accountResponse)
 }
 
 // ListAccounts lists all trading accounts of current user (protected)
@@ -48,23 +59,26 @@ func (h *AccountHandler) VerifyAccountExists(c echo.Context) error {
 func (h *AccountHandler) ListAccounts(c echo.Context) error {
 	userID := c.Get("user_id")
 
-	// TODO: Implement list accounts logic
-	// 1. Get user ID from context
-	// 2. Fetch all accounts from database
-	// 3. Return list with balance, status, etc.
+	if userID == nil || userID == "" {
+		return response.Error(c, http.StatusUnauthorized, "User ID not found in context", "unauthorized")
+	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message": "List accounts - TODO: implement",
-		"user_id": userID,
-		"data": []map[string]interface{}{
-			{
-				"id":             "acc_001",
-				"account_number": "1234567890",
-				"balance":        10000000,
-				"currency":       "VND",
-				"status":         "active",
-			},
-		},
+	accounts, err := h.accountUseCase.ListAccounts(c.Request().Context(), userID.(string))
+	if err != nil {
+		h.logger.Error("Failed to list accounts", zap.Error(err))
+		return response.Error(c, http.StatusInternalServerError, "Failed to list accounts", err.Error())
+	}
+
+	// Prepare data for response
+	var accountsResponse []AccountResponse
+	for _, acc := range accounts {
+		accountsResponse = append(accountsResponse, *ToAccountResponse(acc))
+	}
+
+	return response.Success(c, http.StatusOK, "Accounts retrieved successfully", AccountListingResponse{
+		UserID:   userID.(string),
+		Accounts: accountsResponse,
+		Total:    len(accountsResponse),
 	})
 }
 
@@ -73,24 +87,17 @@ func (h *AccountHandler) ListAccounts(c echo.Context) error {
 func (h *AccountHandler) CreateAccount(c echo.Context) error {
 	userID := c.Get("user_id")
 
-	// TODO: Implement create account logic
-	// 1. Get user ID from context
-	// 2. Check if user is KYC verified
-	// 3. Parse request body (account type, currency)
-	// 4. Generate account number
-	// 5. Create account in database
-	// 6. Return new account info
+	if userID == nil || userID == "" {
+		return response.Error(c, http.StatusUnauthorized, "User ID not found in context", "unauthorized")
+	}
 
-	return c.JSON(http.StatusCreated, map[string]interface{}{
-		"message": "Account created successfully",
-		"user_id": userID,
-		"data": map[string]interface{}{
-			"id":             "acc_002",
-			"account_number": "9876543210",
-			"balance":        0,
-			"currency":       "VND",
-		},
-	})
+	acc, err := h.accountUseCase.CreateAccount(c.Request().Context(), userID.(string))
+	if err != nil {
+		h.logger.Error("Failed to create account", zap.Error(err), zap.String("userID", userID.(string)))
+		return response.Error(c, http.StatusInternalServerError, "Failed to create account", err.Error())
+	}
+
+	return response.Success(c, http.StatusCreated, "Account created successfully", ToAccountResponse(acc))
 }
 
 // GetAccountDetail gets account details (protected)
@@ -99,26 +106,31 @@ func (h *AccountHandler) GetAccountDetail(c echo.Context) error {
 	accountID := c.Param("id")
 	userID := c.Get("user_id")
 
-	// TODO: Implement get account detail logic
-	// 1. Get account ID from URL param
-	// 2. Get user ID from context
-	// 3. Verify account belongs to user
-	// 4. Fetch account details from database
-	// 5. Return full account info
+	if accountID == "" {
+		return response.Error(c, http.StatusBadRequest, "Account ID is required", "account_id_empty")
+	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message": "Get account detail - TODO: implement",
-		"user_id": userID,
-		"data": map[string]interface{}{
-			"id":                accountID,
-			"account_number":    "1234567890",
-			"balance":           10000000,
-			"available_balance": 9500000,
-			"frozen_balance":    500000,
-			"currency":          "VND",
-			"status":            "active",
-		},
-	})
+	if userID == nil || userID == "" {
+		return response.Error(c, http.StatusUnauthorized, "User ID not found in context", "unauthorized")
+	}
+
+	acc, err := h.accountUseCase.GetAccount(c.Request().Context(), accountID)
+	if err != nil {
+		h.logger.Error("Failed to get account details", zap.Error(err), zap.String("accountID", accountID))
+		return response.Error(c, http.StatusInternalServerError, "Failed to get account details", err.Error())
+	}
+
+	if acc == nil {
+		return response.Error(c, http.StatusNotFound, "Account not found", account.ErrAccountNotFound.Error())
+	}
+
+	// Basic authorization check: verify the account actually belongs to this user
+	if acc.UserID != userID.(string) {
+		h.logger.Warn("Unauthorized account access attempt", zap.String("userID", userID.(string)), zap.String("accountUserID", acc.UserID))
+		return response.Error(c, http.StatusForbidden, "You don't have permission to access this account", "forbidden")
+	}
+
+	return response.Success(c, http.StatusOK, "Account details retrieved", ToAccountResponse(acc))
 }
 
 // Deposit deposits money to account (protected)
@@ -127,26 +139,36 @@ func (h *AccountHandler) Deposit(c echo.Context) error {
 	accountID := c.Param("id")
 	userID := c.Get("user_id")
 
-	// TODO: Implement deposit logic
-	// 1. Get account ID and user ID
-	// 2. Verify account belongs to user
-	// 3. Parse request body (amount, payment_method)
-	// 4. Validate amount > 0
-	// 5. Create deposit transaction
-	// 6. Update account balance (after payment confirmation)
-	// 7. Return transaction info
+	if accountID == "" {
+		return response.Error(c, http.StatusBadRequest, "Account ID is required", "account_id_empty")
+	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message":    "Deposit initiated - TODO: implement",
-		"user_id":    userID,
-		"account_id": accountID,
-		"data": map[string]interface{}{
-			"transaction_id": "txn_001",
-			"amount":         5000000,
-			"status":         "pending",
-			"payment_url":    "https://payment.example.com/pay/txn_001",
-		},
-	})
+	if userID == nil || userID == "" {
+		return response.Error(c, http.StatusUnauthorized, "User ID not found in context", "unauthorized")
+	}
+
+	var req DepositRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "Invalid request payload", err.Error())
+	}
+
+	if req.Amount <= 0 {
+		return response.Error(c, http.StatusBadRequest, "Invalid amount", "Amount must be greater than zero")
+	}
+
+	acc, err := h.accountUseCase.Deposit(c.Request().Context(), accountID, userID.(string), req.Amount)
+	if err != nil {
+		h.logger.Error("Failed to deposit to account", zap.Error(err), zap.String("accountID", accountID))
+
+		// Map domain error to 400 Bad Request
+		if err == account.ErrInvalidAmount || err == account.ErrAccountNotFound {
+			return response.Error(c, http.StatusBadRequest, "Failed to deposit", err.Error())
+		}
+
+		return response.Error(c, http.StatusInternalServerError, "Failed to process deposit", err.Error())
+	}
+
+	return response.Success(c, http.StatusOK, "Deposit successful", ToAccountResponse(acc))
 }
 
 // Withdraw withdraws money from account (protected)
@@ -155,25 +177,34 @@ func (h *AccountHandler) Withdraw(c echo.Context) error {
 	accountID := c.Param("id")
 	userID := c.Get("user_id")
 
-	// TODO: Implement withdraw logic
-	// 1. Get account ID and user ID
-	// 2. Verify account belongs to user
-	// 3. Parse request body (amount, bank_account)
-	// 4. Validate amount > 0 and <= available_balance
-	// 5. Create withdraw transaction
-	// 6. Freeze amount in account
-	// 7. Process withdrawal (async)
-	// 8. Return transaction info
+	if accountID == "" {
+		return response.Error(c, http.StatusBadRequest, "Account ID is required", "account_id_empty")
+	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message":    "Withdrawal initiated - TODO: implement",
-		"user_id":    userID,
-		"account_id": accountID,
-		"data": map[string]interface{}{
-			"transaction_id": "txn_002",
-			"amount":         2000000,
-			"status":         "processing",
-			"estimated_time": "1-3 business days",
-		},
-	})
+	if userID == nil || userID == "" {
+		return response.Error(c, http.StatusUnauthorized, "User ID not found in context", "unauthorized")
+	}
+
+	var req WithdrawRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "Invalid request payload", err.Error())
+	}
+
+	if req.Amount <= 0 {
+		return response.Error(c, http.StatusBadRequest, "Invalid amount", "Amount must be greater than zero")
+	}
+
+	acc, err := h.accountUseCase.Withdraw(c.Request().Context(), accountID, userID.(string), req.Amount)
+	if err != nil {
+		h.logger.Error("Failed to withdraw from account", zap.Error(err), zap.String("accountID", accountID))
+
+		// Map domain logic errors to 400 Bad Request
+		if err == account.ErrInsufficientBalance || err == account.ErrInvalidAmount || err == account.ErrAccountNotFound {
+			return response.Error(c, http.StatusBadRequest, "Failed to withdraw", err.Error())
+		}
+
+		return response.Error(c, http.StatusInternalServerError, "Failed to process withdrawal", err.Error())
+	}
+
+	return response.Success(c, http.StatusOK, "Withdrawal successful", ToAccountResponse(acc))
 }

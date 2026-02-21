@@ -17,18 +17,20 @@ import (
 // NewRepositories initializes all repository implementations
 func NewRepositories(db *gorm.DB) *domain.Repositories {
 	return &domain.Repositories{
-		User:        implUser.NewUserRepository(db),
-		Account:     implAccount.NewAccountRepository(db),
-		Order:       implOrder.NewOrderRepository(db),
-		Portfolio:   implPortfolio.NewPortfolioRepository(db),
-		Stock:       implMarket.NewStockRepository(db),
-		Price:       implMarket.NewPriceRepository(db),
-		Candle:      implMarket.NewCandleRepository(db),
-		Trade:       implExecution.NewTradeRepository(db),
-		Settlement:  implExecution.NewSettlementRepository(db),
-		Clearing:    implExecution.NewClearingRepository(db),
-		RiskLimit:   implRisk.NewRiskLimitRepository(db),
-		RiskMetrics: implRisk.NewRiskMetricsRepository(db),
-		RiskAlert:   implRisk.NewRiskAlertRepository(db),
+		User:                 implUser.NewUserRepository(db),
+		Account:              implAccount.NewAccountRepository(db),
+		AccountEventStore:    implAccount.NewEventStore(db),
+		AccountReadModelRepo: implAccount.NewReadModelRepository(db),
+		Order:                implOrder.NewOrderRepository(db),
+		Portfolio:            implPortfolio.NewPortfolioRepository(db),
+		Stock:                implMarket.NewStockRepository(db),
+		Price:                implMarket.NewPriceRepository(db),
+		Candle:               implMarket.NewCandleRepository(db),
+		Trade:                implExecution.NewTradeRepository(db),
+		Settlement:           implExecution.NewSettlementRepository(db),
+		Clearing:             implExecution.NewClearingRepository(db),
+		RiskLimit:            implRisk.NewRiskLimitRepository(db),
+		RiskMetrics:          implRisk.NewRiskMetricsRepository(db),
+		RiskAlert:            implRisk.NewRiskAlertRepository(db),
 	}
 }

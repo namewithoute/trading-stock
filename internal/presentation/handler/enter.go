@@ -10,6 +10,8 @@ import (
 	"trading-stock/internal/presentation/handler/portfolio"
 	"trading-stock/internal/presentation/handler/trade"
 	"trading-stock/internal/presentation/handler/user"
+
+	"go.uber.org/zap"
 )
 
 // HandlerGroup groups all HTTP handlers for easy dependency injection.
@@ -25,15 +27,15 @@ type HandlerGroup struct {
 }
 
 // NewHandlerGroup initialises all handlers with their respective use cases.
-func NewHandlerGroup(services *application.Usecases) *HandlerGroup {
+func NewHandlerGroup(services *application.Usecases, logger *zap.Logger) *HandlerGroup {
 	return &HandlerGroup{
-		AuthHandler:      auth.NewAuthHandler(services.Auth),
-		UserHandler:      user.NewUserHandler(services.User),
-		AccountHandler:   account.NewAccountHandler(services.Account),
-		OrderHandler:     order.NewOrderHandler(services.Order),
-		PortfolioHandler: portfolio.NewPortfolioHandler(services.Portfolio),
-		MarketHandler:    market.NewMarketHandler(services.Market),
-		TradeHandler:     trade.NewTradeHandler(services.Trade),
-		AdminHandler:     admin.NewAdminHandler(services.Admin),
+		AuthHandler:      auth.NewAuthHandler(services.Auth, logger),
+		UserHandler:      user.NewUserHandler(services.User, logger),
+		AccountHandler:   account.NewAccountHandler(services.Account, logger),
+		OrderHandler:     order.NewOrderHandler(services.Order, logger),
+		PortfolioHandler: portfolio.NewPortfolioHandler(services.Portfolio, logger),
+		MarketHandler:    market.NewMarketHandler(services.Market, logger),
+		TradeHandler:     trade.NewTradeHandler(services.Trade, logger),
+		AdminHandler:     admin.NewAdminHandler(services.Admin, logger),
 	}
 }

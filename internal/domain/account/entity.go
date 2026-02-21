@@ -10,9 +10,11 @@ type Account struct {
 	AccountType AccountType
 
 	// Balance information
-	Balance     float64
-	BuyingPower float64
-	Currency    string
+	// Balance     float64
+	// BuyingPower float64
+	// Currency    string
+
+	Money Money
 
 	// Margin account specific (only for margin accounts)
 	MarginUsed      float64
@@ -33,44 +35,44 @@ func (a *Account) IsActive() bool {
 
 // CanTrade checks if the account can perform trading operations
 func (a *Account) CanTrade() bool {
-	return a.IsActive() && a.BuyingPower > 0
+	return a.IsActive() && a.Money.BuyingPower > 0
 }
 
 // HasSufficientBalance checks if the account has sufficient balance for a purchase
 func (a *Account) HasSufficientBalance(amount float64) bool {
-	return a.BuyingPower >= amount
+	return a.Money.BuyingPower >= amount
 }
 
 // Deposit adds funds to the account
 func (a *Account) Deposit(amount float64) {
-	a.Balance += amount
-	a.BuyingPower += amount
+	a.Money.Balance += amount
+	a.Money.BuyingPower += amount
 	a.UpdatedAt = time.Now()
 }
 
 // Withdraw removes funds from the account
 func (a *Account) Withdraw(amount float64) error {
-	if a.Balance < amount {
+	if a.Money.Balance < amount {
 		return ErrInsufficientBalance
 	}
-	a.Balance -= amount
-	a.BuyingPower -= amount
+	a.Money.Balance -= amount
+	a.Money.BuyingPower -= amount
 	a.UpdatedAt = time.Now()
 	return nil
 }
 
 // ReserveFunds reserves funds for an order (reduces buying power)
 func (a *Account) ReserveFunds(amount float64) error {
-	if a.BuyingPower < amount {
+	if a.Money.BuyingPower < amount {
 		return ErrInsufficientBuyingPower
 	}
-	a.BuyingPower -= amount
+	a.Money.BuyingPower -= amount
 	a.UpdatedAt = time.Now()
 	return nil
 }
 
 // ReleaseFunds releases reserved funds (increases buying power)
 func (a *Account) ReleaseFunds(amount float64) {
-	a.BuyingPower += amount
+	a.Money.BuyingPower += amount
 	a.UpdatedAt = time.Now()
 }

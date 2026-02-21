@@ -5,17 +5,20 @@ import (
 	adminUC "trading-stock/internal/application/admin"
 
 	"github.com/labstack/echo/v4"
+	"go.uber.org/zap"
 )
 
 // AdminHandler handles admin endpoints
 type AdminHandler struct {
-	adminUseCase adminUC.UseCase // Uncomment when service is ready
+	adminUseCase adminUC.UseCase
+	logger       *zap.Logger
 }
 
 // NewAdminHandler creates a new admin handler
-func NewAdminHandler(adminUseCase adminUC.UseCase) *AdminHandler {
+func NewAdminHandler(adminUseCase adminUC.UseCase, logger *zap.Logger) *AdminHandler {
 	return &AdminHandler{
 		adminUseCase: adminUseCase,
+		logger:       logger,
 	}
 }
 

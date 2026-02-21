@@ -11,6 +11,7 @@ import (
 	"trading-stock/internal/application/risk"
 	userUC "trading-stock/internal/application/user"
 	"trading-stock/internal/domain"
+	domainAccount "trading-stock/internal/domain/account"
 	"trading-stock/internal/domain/user"
 	"trading-stock/pkg/jwtservice"
 
@@ -32,26 +33,68 @@ type Usecases struct {
 	Risk      risk.UseCase
 }
 
-// NewUsecases wires all use cases with their required dependencies.
-//   - hasher     ? implements domain/user.PasswordHasher (lives in infra/user)
-//   - jwtService ? pkg/jwtservice.Service (a shared technical utility, not a domain)
+// NewUsecases constructs all use cases.
+//
+// ── Dependency Inversion Principle ─────────────────────────────────────────
+//
+//	This function accepts ONLY interfaces defined in the Domain Layer.
+//	It must NEVER import or reference Infrastructure packages directly.
+//
+//	Concrete infra implementations (e.g. EventSourcingService) are built
+//	in wire.go and passed in as their Domain interface types.
+//
+// ── Parameters ──────────────────────────────────────────────────────────────
+//
+//	repos           – all domain repository interfaces (from infrastructure layer)
+//	hasher          – password hashing port (domain/user.PasswordHasher)
+//	jwtSvc          – JWT utility (shared pkg; no domain concepts leak)
+//	redis           – Redis client (technical utility, not a domain concept)
+//	kafkaWriter     – Kafka writer (technical utility)
+//	accountEventSvc – Event Sourcing port for Account (domain.EventSourcingServicePort)
+//	logger          – structured logger
 func NewUsecases(
 	repos *domain.Repositories,
 	hasher user.PasswordHasher,
 	jwtSvc jwtservice.Service,
 	redis *redis.Client,
-	kafka *kafka.Writer,
+	kafkaWriter *kafka.Writer,
+	// Account Event Sourcing port – injected as a domain interface, built in wire.go
+	accountEventSvc domainAccount.EventSourcingServicePort,
 	logger *zap.Logger,
 ) *Usecases {
 	return &Usecases{
-		Auth:      auth.NewUseCase(repos.User, hasher, jwtSvc, redis, logger),
-		User:      userUC.NewUseCase(repos.User, logger),
-		Account:   account.NewUseCase(repos.Account, logger),
-		Order:     order.NewUseCase(repos.Order, repos.Account, kafka, logger),
-		Portfolio: portfolio.NewUseCase(repos.Portfolio, logger),
-		Market:    market.NewUseCase(repos.Stock, repos.Price, repos.Candle, redis, logger),
-		Trade:     execution.NewUseCase(repos.Trade, logger),
-		Admin:     admin.NewUseCase(repos.User, repos.Order, logger),
-		Risk:      risk.NewUseCase(repos.RiskLimit, repos.RiskMetrics, repos.RiskAlert, logger),
+		Auth: auth.NewUseCase(
+			repos.User, hasher, jwtSvc, redis, logger,
+		),
+		User: userUC.NewUseCase(
+			repos.User, logger,
+		),
+
+		// Account: write commands go through Event Sourcing port;
+		//          reads go through the Read Model repository.
+		Account: account.NewUseCase(
+			accountEventSvc,            // EventSourcingServicePort (domain interface)
+			repos.AccountReadModelRepo, // ReadModelRepository (domain interface)
+			logger,
+		),
+
+		Order: order.NewUseCase(
+			repos.Order, repos.Account, kafkaWriter, logger,
+		),
+		Portfolio: portfolio.NewUseCase(
+			repos.Portfolio, logger,
+		),
+		Market: market.NewUseCase(
+			repos.Stock, repos.Price, repos.Candle, redis, logger,
+		),
+		Trade: execution.NewUseCase(
+			repos.Trade, logger,
+		),
+		Admin: admin.NewUseCase(
+			repos.User, repos.Order, logger,
+		),
+		Risk: risk.NewUseCase(
+			repos.RiskLimit, repos.RiskMetrics, repos.RiskAlert, logger,
+		),
 	}
 }

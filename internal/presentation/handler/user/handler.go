@@ -5,17 +5,20 @@ import (
 	userUC "trading-stock/internal/application/user"
 
 	"github.com/labstack/echo/v4"
+	"go.uber.org/zap"
 )
 
 // UserHandler handles user management endpoints
 type UserHandler struct {
-	UserUseCase userUC.UseCase // Uncomment when service is ready
+	userUseCase userUC.UseCase
+	logger      *zap.Logger
 }
 
 // NewUserHandler creates a new user handler
-func NewUserHandler(UserUseCase userUC.UseCase) *UserHandler {
+func NewUserHandler(userUseCase userUC.UseCase, logger *zap.Logger) *UserHandler {
 	return &UserHandler{
-		UserUseCase: UserUseCase,
+		userUseCase: userUseCase,
+		logger:      logger,
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"trading-stock/internal/application"
 	"trading-stock/internal/config"
 	"trading-stock/internal/domain"
+	infraAccount "trading-stock/internal/infrastructure/account"
 	"trading-stock/internal/presentation/handler"
 	"trading-stock/pkg/jwtservice"
 	"trading-stock/pkg/logger"
@@ -22,7 +23,7 @@ import (
 // It owns all initialized dependencies and their lifecycle.
 //
 // Startup sequence:  New() → [config → logger → resources → wire → server]
-// Shutdown sequence: Shutdown() → [http → db → redis → kafka → logger.sync]
+// Shutdown sequence: Shutdown() → [http → projector → db → redis → kafka → logger.sync]
 type App struct {
 	Config *config.Config
 	Logger *zap.Logger
@@ -40,6 +41,10 @@ type App struct {
 	Usecases     *application.Usecases
 	Handlers     *handler.HandlerGroup
 	JWTService   jwtservice.Service
+
+	// Background workers
+	AccountProjector *infraAccount.Projector // consumes account.events → upserts read model
+	projectorCancel  context.CancelFunc      // cancel fn to stop the projector goroutine
 }
 
 // New bootstraps the application in a strict, ordered sequence.

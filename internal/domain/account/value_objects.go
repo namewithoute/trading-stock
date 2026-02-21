@@ -1,6 +1,9 @@
 package account
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // AccountType represents the type of trading account
 type AccountType string
@@ -30,6 +33,10 @@ const (
 	StatusPending Status = "PENDING" // Account is pending approval
 )
 
+func (s Status) Compare(status Status) bool {
+	return s == status
+}
+
 // IsValid checks if the status is valid
 func (s Status) IsValid() bool {
 	switch s {
@@ -52,4 +59,34 @@ var (
 	ErrAccountFrozen           = errors.New("account is frozen")
 	ErrAccountClosed           = errors.New("account is closed")
 	ErrInvalidAccountType      = errors.New("invalid account type")
+	ErrAccountNotFound         = errors.New("account not found")
+	ErrAccountAlreadyExists    = errors.New("account already exists")
+	ErrAccountNotActive        = errors.New("account is not active")
+	ErrInvalidAmount           = errors.New("invalid amount: must be greater than zero")
 )
+
+type Money struct {
+	Balance     float64
+	BuyingPower float64
+	Currency    string
+}
+
+func NewMoney(balance, buyingPower float64, currency string) Money {
+	return Money{
+		Balance:     balance,
+		BuyingPower: buyingPower,
+		Currency:    currency,
+	}
+}
+
+func (m Money) IsValid() bool {
+	return m.Balance >= 0 && m.BuyingPower >= 0 && m.Currency != ""
+}
+
+func (m Money) StringBalance() string {
+	return fmt.Sprintf("%.2f %s", m.Balance, m.Currency)
+}
+
+func (m Money) StringBuyingPower() string {
+	return fmt.Sprintf("%.2f %s", m.BuyingPower, m.Currency)
+}

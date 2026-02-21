@@ -5,17 +5,20 @@ import (
 	orderUC "trading-stock/internal/application/order"
 
 	"github.com/labstack/echo/v4"
+	"go.uber.org/zap"
 )
 
 // OrderHandler handles order management endpoints
 type OrderHandler struct {
-	OrderUseCase orderUC.UseCase // Uncomment when service is ready
+	orderUseCase orderUC.UseCase
+	logger       *zap.Logger
 }
 
 // NewOrderHandler creates a new order handler
-func NewOrderHandler(OrderUseCase orderUC.UseCase) *OrderHandler {
+func NewOrderHandler(orderUseCase orderUC.UseCase, logger *zap.Logger) *OrderHandler {
 	return &OrderHandler{
-		OrderUseCase: OrderUseCase,
+		orderUseCase: orderUseCase,
+		logger:       logger,
 	}
 }
 
@@ -43,7 +46,7 @@ func (h *OrderHandler) CreateOrder(c echo.Context) error {
 
 	// Call UseCase
 	accountID := "" // Will let usecase handle getting the primary account natively
-	createdOrder, err := h.OrderUseCase.CreateOrder(
+	createdOrder, err := h.orderUseCase.CreateOrder(
 		c.Request().Context(),
 		userID.(string),
 		accountID,
@@ -95,7 +98,7 @@ func (h *OrderHandler) ListOrders(c echo.Context) error {
 	}
 	offset := (page - 1) * limit
 
-	orders, err := h.OrderUseCase.ListOrders(
+	orders, err := h.orderUseCase.ListOrders(
 		c.Request().Context(),
 		userID.(string),
 		listOrdersRequest.Symbol,

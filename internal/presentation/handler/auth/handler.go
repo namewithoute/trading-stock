@@ -7,17 +7,20 @@ import (
 	"trading-stock/pkg/response"
 
 	"github.com/labstack/echo/v4"
+	"go.uber.org/zap"
 )
 
 // AuthHandler handles HTTP requests for all auth-related endpoints.
 type AuthHandler struct {
 	authUseCase authUC.UseCase
+	logger      *zap.Logger
 }
 
 // NewAuthHandler creates a new AuthHandler with its UseCase dependency.
-func NewAuthHandler(authUseCase authUC.UseCase) *AuthHandler {
+func NewAuthHandler(authUseCase authUC.UseCase, logger *zap.Logger) *AuthHandler {
 	return &AuthHandler{
 		authUseCase: authUseCase,
+		logger:      logger,
 	}
 }
 

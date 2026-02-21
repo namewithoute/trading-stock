@@ -1,0 +1,247 @@
+{
+	"info": {
+		"_postman_id": "8b080829-d586-4e5a-a4ea-bbdddfcf114c",
+		"name": "Trading Stock - Account Domain",
+		"description": "API requests for Account Domain. Note: APIs marked with '(Auto Auth)' assume the server middleware injects the `user_id`. For testing via Postman, you may need a mock server configuration or pass an Authorization Header.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Account Endpoints",
+			"item": [
+				{
+					"name": "Verify Account Exists",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/accounts/verify/:account_number",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"accounts",
+								"verify",
+								":account_number"
+							],
+							"variable": [
+								{
+									"key": "account_number",
+									"value": "9876543210"
+								}
+							]
+						},
+						"description": "Verifies if an account number exists and is active. This is a public endpoint."
+					},
+					"response": []
+				},
+				{
+					"name": "List User Accounts",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/accounts",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"accounts"
+							]
+						},
+						"description": "Lists all trading accounts belonging to the authenticated user."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Account",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/accounts",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"accounts"
+							]
+						},
+						"description": "Creates a new trading account for the authenticated user."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Account Details",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/accounts/:id",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"accounts",
+								":id"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "your_account_id_here"
+								}
+							]
+						},
+						"description": "Gets detailed information about a specific trading account belonging to the authenticated user."
+					},
+					"response": []
+				},
+				{
+					"name": "Deposit Money",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"amount\": 5000\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/accounts/:id/deposit",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"accounts",
+								":id",
+								"deposit"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "your_account_id_here"
+								}
+							]
+						},
+						"description": "Deposits funds into the specified account."
+					},
+					"response": []
+				},
+				{
+					"name": "Withdraw Money",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"amount\": 1000\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/accounts/:id/withdraw",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"accounts",
+								":id",
+								"withdraw"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "your_account_id_here"
+								}
+							]
+						},
+						"description": "Withdraws funds from the specified account."
+					},
+					"response": []
+				}
+			],
+			"description": "Group of APIs related to Managing User Trading Accounts"
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8080",
+			"type": "string"
+		},
+		{
+			"key": "jwt_token",
+			"value": "your_test_token_here",
+			"type": "string"
+		}
+	]
+}

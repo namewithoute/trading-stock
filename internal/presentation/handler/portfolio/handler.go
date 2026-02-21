@@ -5,17 +5,20 @@ import (
 	portfolioUC "trading-stock/internal/application/portfolio"
 
 	"github.com/labstack/echo/v4"
+	"go.uber.org/zap"
 )
 
 // PortfolioHandler handles portfolio management endpoints
 type PortfolioHandler struct {
-	PortfolioUseCase portfolioUC.UseCase // Uncomment when service is ready
+	portfolioUseCase portfolioUC.UseCase
+	logger           *zap.Logger
 }
 
 // NewPortfolioHandler creates a new portfolio handler
-func NewPortfolioHandler(PortfolioUseCase portfolioUC.UseCase) *PortfolioHandler {
+func NewPortfolioHandler(portfolioUseCase portfolioUC.UseCase, logger *zap.Logger) *PortfolioHandler {
 	return &PortfolioHandler{
-		PortfolioUseCase: PortfolioUseCase,
+		portfolioUseCase: portfolioUseCase,
+		logger:           logger,
 	}
 }
 

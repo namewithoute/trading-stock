@@ -5,17 +5,20 @@ import (
 	executionUC "trading-stock/internal/application/execution"
 
 	"github.com/labstack/echo/v4"
+	"go.uber.org/zap"
 )
 
 // TradeHandler handles trade history endpoints
 type TradeHandler struct {
-	TradeUseCase executionUC.UseCase // Uncomment when service is ready
+	tradeUseCase executionUC.UseCase
+	logger       *zap.Logger
 }
 
 // NewTradeHandler creates a new trade handler
-func NewTradeHandler(TradeUseCase executionUC.UseCase) *TradeHandler {
+func NewTradeHandler(tradeUseCase executionUC.UseCase, logger *zap.Logger) *TradeHandler {
 	return &TradeHandler{
-		TradeUseCase: TradeUseCase,
+		tradeUseCase: tradeUseCase,
+		logger:       logger,
 	}
 }
 

@@ -12,9 +12,27 @@ import (
 	"go.uber.org/zap"
 )
 
-// Run starts the HTTP server and handles graceful shutdown
+// Run starts all background workers and the HTTP server, then blocks until
+// the process receives an OS signal or the server errors.
 func (a *App) Run() error {
-	// Start server in goroutine
+	// ── 1. Start background workers ───────────────────────────────────
+
+	// Start Account Projector: consumes account.events from Kafka
+	// and upserts the account_read_models table.
+	// It runs in a dedicated goroutine with its own cancellable context
+	// so Shutdown() can stop it cleanly without killing the whole process.
+	if a.AccountProjector != nil {
+		projCtx, cancel := context.WithCancel(context.Background())
+		a.projectorCancel = cancel
+
+		go func() {
+			a.Logger.Info("[ Projector ] Account Projector starting...")
+			a.AccountProjector.Run(projCtx) // blocks until projCtx is cancelled
+			a.Logger.Info("[ Projector ] Account Projector stopped")
+		}()
+	}
+
+	// ── 2. Start HTTP server ───────────────────────────────────────────
 	errChan := make(chan error, 1)
 	go func() {
 		addr := fmt.Sprintf(":%d", a.Config.App.Port)
@@ -22,13 +40,12 @@ func (a *App) Run() error {
 			zap.String("address", addr),
 			zap.String("env", a.Config.App.Env),
 		)
-
 		if err := a.Echo.Start(addr); err != nil && err != http.ErrServerClosed {
 			errChan <- err
 		}
 	}()
 
-	// Wait for shutdown signal
+	// ── 3. Wait for shutdown signal or server error ────────────────────
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
@@ -40,49 +57,53 @@ func (a *App) Run() error {
 		return err
 	}
 
-	// Graceful shutdown
 	return a.Shutdown()
 }
 
-// Shutdown gracefully shuts down all resources
+// Shutdown gracefully stops all resources in reverse startup order.
 func (a *App) Shutdown() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	a.Logger.Info("Shutting down gracefully...")
 
-	// Shutdown HTTP server
+	// ── 1. HTTP server – stop accepting new requests first ────────────
 	if err := a.shutdownHTTPServer(ctx); err != nil {
 		a.Logger.Error("HTTP server shutdown failed", zap.Error(err))
 	}
 
-	// Close infrastructure connections
+	// ── 2. Background workers ─────────────────────────────────────────
+	// Cancel the projector's context so its FetchMessage loop exits.
+	if a.projectorCancel != nil {
+		a.Logger.Info("Stopping Account Projector...")
+		a.projectorCancel()
+	}
+
+	// ── 3. Infrastructure connections ─────────────────────────────────
 	a.closeResources()
 
-	// Sync logger
+	// ── 4. Flush logger ───────────────────────────────────────────────
 	_ = a.Logger.Sync() // Ignore sync errors on Windows
 
 	a.Logger.Info("Shutdown completed successfully")
 	return nil
 }
 
-// shutdownHTTPServer gracefully shuts down the HTTP server
+// shutdownHTTPServer sends a graceful shutdown signal to Echo.
 func (a *App) shutdownHTTPServer(ctx context.Context) error {
 	if a.Echo == nil {
 		return nil
 	}
-
 	if err := a.Echo.Shutdown(ctx); err != nil {
 		return fmt.Errorf("failed to shutdown HTTP server: %w", err)
 	}
-
 	a.Logger.Info("HTTP server stopped")
 	return nil
 }
 
-// closeInfrastructure closes all infrastructure connections
+// closeResources closes external infrastructure connections in order.
 func (a *App) closeResources() {
-	// Close database
+	// Database
 	if a.DB != nil {
 		if sqlDB, err := a.DB.DB(); err == nil {
 			if err := sqlDB.Close(); err != nil {
@@ -93,7 +114,7 @@ func (a *App) closeResources() {
 		}
 	}
 
-	// Close Redis
+	// Redis
 	if a.Redis != nil {
 		if err := a.Redis.Close(); err != nil {
 			a.Logger.Error("Failed to close Redis", zap.Error(err))
@@ -102,10 +123,10 @@ func (a *App) closeResources() {
 		}
 	}
 
-	// Close Kafka
+	// Kafka (writer flushes pending messages before closing)
 	if a.Kafka != nil {
 		if err := a.Kafka.Close(); err != nil {
-			a.Logger.Error("Failed to close Kafka", zap.Error(err))
+			a.Logger.Error("Failed to close Kafka writer", zap.Error(err))
 		} else {
 			a.Logger.Info("Kafka writer closed")
 		}

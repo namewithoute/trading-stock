@@ -5,17 +5,20 @@ import (
 	marketUC "trading-stock/internal/application/market"
 
 	"github.com/labstack/echo/v4"
+	"go.uber.org/zap"
 )
 
 // MarketHandler handles market data endpoints
 type MarketHandler struct {
-	MarketUseCase marketUC.UseCase // Uncomment when service is ready
+	marketUseCase marketUC.UseCase
+	logger        *zap.Logger
 }
 
 // NewMarketHandler creates a new market handler
-func NewMarketHandler(MarketUseCase marketUC.UseCase) *MarketHandler {
+func NewMarketHandler(marketUseCase marketUC.UseCase, logger *zap.Logger) *MarketHandler {
 	return &MarketHandler{
-		MarketUseCase: MarketUseCase,
+		marketUseCase: marketUseCase,
+		logger:        logger,
 	}
 }
 

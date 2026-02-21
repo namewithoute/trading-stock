@@ -36,9 +36,9 @@ func toAccountModel(a *domain.Account) *AccountModel {
 		ID:              a.ID,
 		UserID:          a.UserID,
 		AccountType:     string(a.AccountType),
-		Balance:         a.Balance,
-		BuyingPower:     a.BuyingPower,
-		Currency:        a.Currency,
+		Balance:         a.Money.Balance,
+		BuyingPower:     a.Money.BuyingPower,
+		Currency:        a.Money.Currency,
 		MarginUsed:      a.MarginUsed,
 		MarginAvailable: a.MarginAvailable,
 		Status:          string(a.Status),
@@ -52,12 +52,14 @@ func (m *AccountModel) toDomain() *domain.Account {
 		return nil
 	}
 	return &domain.Account{
-		ID:              m.ID,
-		UserID:          m.UserID,
-		AccountType:     domain.AccountType(m.AccountType),
-		Balance:         m.Balance,
-		BuyingPower:     m.BuyingPower,
-		Currency:        m.Currency,
+		ID:          m.ID,
+		UserID:      m.UserID,
+		AccountType: domain.AccountType(m.AccountType),
+		Money: domain.Money{
+			Balance:     m.Balance,
+			BuyingPower: m.BuyingPower,
+			Currency:    m.Currency,
+		},
 		MarginUsed:      m.MarginUsed,
 		MarginAvailable: m.MarginAvailable,
 		Status:          domain.Status(m.Status),
