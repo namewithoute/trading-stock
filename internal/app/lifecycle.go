@@ -16,39 +16,43 @@ import (
 // the process receives an OS signal or the server errors.
 func (a *App) Run() error {
 	// ── 1. Start background workers ───────────────────────────────────
+	// Create ONE cancellable context shared by ALL projectors.
+	// Shutdown() calls projectorCancel() to stop them all at once.
+	projCtx, cancel := context.WithCancel(context.Background())
+	a.projectorCancel = cancel
 
-	// Start Account Projector: consumes account.events from Kafka
-	// and upserts the account_read_models table.
-	// It runs in a dedicated goroutine with its own cancellable context
-	// so Shutdown() can stop it cleanly without killing the whole process.
+	// ── Account Projector ─────────────────────────────────────────────
 	if a.AccountProjector != nil {
-		projCtx, cancel := context.WithCancel(context.Background())
-		a.projectorCancel = cancel
-
-		// ── Phase 1: Catch-up rebuild (SYNCHRONOUS, blocks HTTP startup) ──────
-		// Replay all historical events from EventStore → upsert all read models.
-		// This guarantees the read model table is fully consistent BEFORE the
-		// service starts accepting traffic and BEFORE the Kafka consumer begins.
-		a.Logger.Info("[ Projector ] Starting catch-up rebuild from EventStore...")
+		// Phase 1: Catch-up rebuild (SYNCHRONOUS — guarantees read model is
+		// consistent before HTTP traffic starts and before Kafka consumer begins).
+		a.Logger.Info("[ Projector ] Account: starting catch-up rebuild...")
 		if err := a.AccountProjector.Rebuild(projCtx); err != nil {
-			// Non-fatal: log the error but continue. The read model may be stale,
-			// but the Kafka consumer will catch up on new events going forward.
-			a.Logger.Error("[ Projector ] Rebuild failed — service will continue with potentially stale read models",
+			a.Logger.Error("[ Projector ] Account Rebuild failed — read models may be stale",
 				zap.Error(err),
 			)
 		}
-
-		// ── Phase 2: Live streaming (ASYNC goroutine) ─────────────────────────
-		// After rebuild, switch to live Kafka event streaming (StartOffset: LastOffset).
-		// Any events that arrived between Rebuild() finishing and now will be picked
-		// up automatically by the Kafka consumer group offset tracking.
+		// Phase 2: Live Kafka streaming (async).
 		go func() {
 			a.Logger.Info("[ Projector ] Account Projector starting live stream...")
-			a.AccountProjector.Run(projCtx) // blocks until projCtx is cancelled
+			a.AccountProjector.Run(projCtx)
 			a.Logger.Info("[ Projector ] Account Projector stopped")
 		}()
 	}
 
+	// ── Order Projector ───────────────────────────────────────────────
+	if a.OrderProjector != nil {
+		a.Logger.Info("[ Projector ] Order: starting catch-up rebuild...")
+		if err := a.OrderProjector.Rebuild(projCtx); err != nil {
+			a.Logger.Error("[ Projector ] Order Rebuild failed — read models may be stale",
+				zap.Error(err),
+			)
+		}
+		go func() {
+			a.Logger.Info("[ Projector ] Order Projector starting live stream...")
+			a.OrderProjector.Run(projCtx)
+			a.Logger.Info("[ Projector ] Order Projector stopped")
+		}()
+	}
 	// ── 2. Start HTTP server ───────────────────────────────────────────
 	errChan := make(chan error, 1)
 	go func() {
@@ -90,9 +94,9 @@ func (a *App) Shutdown() error {
 	}
 
 	// ── 2. Background workers ─────────────────────────────────────────
-	// Cancel the projector's context so its FetchMessage loop exits.
+	// Cancel the projectors' context so their FetchMessage loops exit.
 	if a.projectorCancel != nil {
-		a.Logger.Info("Stopping Account Projector...")
+		a.Logger.Info("Stopping Projectors (Account + Order)...")
 		a.projectorCancel()
 	}
 

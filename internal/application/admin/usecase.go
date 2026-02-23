@@ -16,11 +16,11 @@ type UseCase interface {
 
 type useCase struct {
 	userRepo  user.Repository
-	orderRepo order.Repository
+	orderRepo order.ReadModelRepository // query-side: list/count orders for stats
 	logger    *zap.Logger
 }
 
-func NewUseCase(userRepo user.Repository, orderRepo order.Repository, logger *zap.Logger) UseCase {
+func NewUseCase(userRepo user.Repository, orderRepo order.ReadModelRepository, logger *zap.Logger) UseCase {
 	return &useCase{userRepo: userRepo, orderRepo: orderRepo, logger: logger}
 }
 
@@ -42,3 +42,4 @@ func (s *useCase) GetSystemStats(ctx context.Context) (interface{}, error) {
 		"system_status": "operational",
 	}, nil
 }
+

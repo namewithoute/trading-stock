@@ -1,0 +1,176 @@
+package order
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	domain "trading-stock/internal/domain/order"
+
+	"github.com/google/uuid"
+	"github.com/segmentio/kafka-go"
+	"go.uber.org/zap"
+)
+
+// KafkaTopicOrderEvents is the Kafka topic for order domain events.
+const KafkaTopicOrderEvents = "order.events"
+
+// EventSourcingService implements domain.Repository.
+//
+// Responsibilities:
+//  1. Load  – deserialise + replay all events from EventStore → Aggregate
+//  2. Save  – serialise uncommitted events → AppendEvents (Postgres) → publish (Kafka)
+type EventSourcingService struct {
+	eventStore EventStore
+	publisher  *kafka.Writer
+	logger     *zap.Logger
+}
+
+// NewEventSourcingService constructs the service.
+func NewEventSourcingService(
+	eventStore EventStore,
+	publisher *kafka.Writer,
+	logger *zap.Logger,
+) *EventSourcingService {
+	return &EventSourcingService{
+		eventStore: eventStore,
+		publisher:  publisher,
+		logger:     logger,
+	}
+}
+
+// ─── Load ────────────────────────────────────────────────────────────────────
+
+// Load reconstructs an OrderAggregate from the full event history.
+func (s *EventSourcingService) Load(ctx context.Context, aggregateID string) (*domain.OrderAggregate, error) {
+	descriptors, err := s.eventStore.LoadEvents(ctx, aggregateID)
+	if err != nil {
+		return nil, fmt.Errorf("order eventStore.LoadEvents(%s): %w", aggregateID, err)
+	}
+	if len(descriptors) == 0 {
+		return nil, domain.ErrOrderNotFound
+	}
+
+	events := make([]domain.DomainEvent, 0, len(descriptors))
+	for _, d := range descriptors {
+		ev, err := DeserialiseEvent(d)
+		if err != nil {
+			return nil, fmt.Errorf("deserialise order event %s v%d: %w", d.EventType, d.Version, err)
+		}
+		events = append(events, ev)
+	}
+
+	return domain.RehydrateOrder(events), nil
+}
+
+// ─── Save ────────────────────────────────────────────────────────────────────
+
+// Save persists uncommitted aggregate events then publishes them to Kafka.
+//
+// Guarantees:
+//   - Postgres write first (inside AppendEvents transaction).
+//   - Kafka publish attempted after DB commit; failures are logged only.
+func (s *EventSourcingService) Save(ctx context.Context, agg *domain.OrderAggregate) error {
+	changes := agg.UncommittedEvents()
+	if len(changes) == 0 {
+		return nil
+	}
+
+	// ── Step 1: Serialise → EventDescriptors ──────────────────────────
+	baseVersion := agg.Version - len(changes)
+	descriptors := make([]EventDescriptor, 0, len(changes))
+
+	for i, ev := range changes {
+		payload, err := json.Marshal(ev)
+		if err != nil {
+			return fmt.Errorf("marshal order event %s: %w", ev.GetEventType(), err)
+		}
+		descriptors = append(descriptors, EventDescriptor{
+			ID:          uuid.New().String(),
+			AggregateID: agg.ID,
+			EventType:   ev.GetEventType(),
+			Payload:     payload,
+			Version:     baseVersion + i + 1,
+			OccurredAt:  ev.GetOccurredAt(),
+		})
+	}
+
+	// ── Step 2: Persist to EventStore (Postgres) ──────────────────────
+	if err := s.eventStore.AppendEvents(ctx, agg.ID, baseVersion, descriptors); err != nil {
+		return fmt.Errorf("order eventStore.AppendEvents: %w", err)
+	}
+	agg.ClearUncommittedEvents()
+
+	s.logger.Info("Order events persisted to EventStore",
+		zap.String("aggregate_id", agg.ID),
+		zap.Int("count", len(descriptors)),
+		zap.Int("base_version", baseVersion),
+	)
+
+	// ── Step 3: Publish to Kafka ──────────────────────────────────────
+	// Failure is non-fatal: EventStore is source of truth, Projector can replay.
+	if err := s.publishToKafka(ctx, descriptors); err != nil {
+		s.logger.Error("Kafka publish failed for order events (safe to continue)",
+			zap.Error(err),
+			zap.String("aggregate_id", agg.ID),
+		)
+	}
+
+	return nil
+}
+
+// ─── publishToKafka ──────────────────────────────────────────────────────────
+
+func (s *EventSourcingService) publishToKafka(ctx context.Context, descs []EventDescriptor) error {
+	if s.publisher == nil {
+		return fmt.Errorf("kafka writer is nil – skipping publish")
+	}
+
+	msgs := make([]kafka.Message, 0, len(descs))
+	for _, d := range descs {
+		envelope, err := json.Marshal(d)
+		if err != nil {
+			return fmt.Errorf("marshal event envelope %s: %w", d.EventType, err)
+		}
+		msgs = append(msgs, kafka.Message{
+			Topic: KafkaTopicOrderEvents,
+			Key:   []byte(d.AggregateID), // partition by order ID
+			Value: envelope,
+			Time:  d.OccurredAt,
+		})
+	}
+
+	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	return s.publisher.WriteMessages(writeCtx, msgs...)
+}
+
+// ─── DeserialiseEvent ─────────────────────────────────────────────────────────
+
+// DeserialiseEvent unmarshals an EventDescriptor payload into a typed DomainEvent.
+func DeserialiseEvent(d EventDescriptor) (domain.DomainEvent, error) {
+	switch d.EventType {
+	case domain.EventOrderPlaced:
+		var e domain.OrderPlacedEvent
+		return e, json.Unmarshal(d.Payload, &e)
+	case domain.EventOrderCancelled:
+		var e domain.OrderCancelledEvent
+		return e, json.Unmarshal(d.Payload, &e)
+	case domain.EventOrderPartialFill:
+		var e domain.OrderPartialFillEvent
+		return e, json.Unmarshal(d.Payload, &e)
+	case domain.EventOrderFilled:
+		var e domain.OrderFilledEvent
+		return e, json.Unmarshal(d.Payload, &e)
+	case domain.EventOrderRejected:
+		var e domain.OrderRejectedEvent
+		return e, json.Unmarshal(d.Payload, &e)
+	case domain.EventOrderExpired:
+		var e domain.OrderExpiredEvent
+		return e, json.Unmarshal(d.Payload, &e)
+	default:
+		return nil, fmt.Errorf("unknown order event type: %s", d.EventType)
+	}
+}

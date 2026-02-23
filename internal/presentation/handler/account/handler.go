@@ -91,7 +91,16 @@ func (h *AccountHandler) CreateAccount(c echo.Context) error {
 		return response.Error(c, http.StatusUnauthorized, "User ID not found in context", "unauthorized")
 	}
 
-	acc, err := h.accountUseCase.CreateAccount(c.Request().Context(), accountUC.CreateAccountCommand{UserID: userID.(string)})
+	var req CreateAccountRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "Invalid request payload", err.Error())
+	}
+
+	acc, err := h.accountUseCase.CreateAccount(c.Request().Context(), accountUC.CreateAccountCommand{
+		UserID:      userID.(string),
+		AccountType: req.AccountType,
+		Currency:    req.Currency,
+	})
 	if err != nil {
 		h.logger.Error("Failed to create account", zap.Error(err), zap.String("userID", userID.(string)))
 		return response.Error(c, http.StatusInternalServerError, "Failed to create account", err.Error())

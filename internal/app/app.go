@@ -8,6 +8,7 @@ import (
 	"trading-stock/internal/config"
 	"trading-stock/internal/domain"
 	infraAccount "trading-stock/internal/infrastructure/account"
+	infraOrder "trading-stock/internal/infrastructure/order"
 	"trading-stock/internal/presentation/handler"
 	"trading-stock/pkg/jwtservice"
 	"trading-stock/pkg/logger"
@@ -44,6 +45,7 @@ type App struct {
 
 	// Background workers
 	AccountProjector *infraAccount.Projector // consumes account.events → upserts read model
+	OrderProjector   *infraOrder.Projector   // consumes order.events  → upserts read model
 	projectorCancel  context.CancelFunc      // cancel fn to stop the projector goroutine
 }
 

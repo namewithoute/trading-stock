@@ -19,7 +19,7 @@ func NewRepositories(db *gorm.DB) *domain.Repositories {
 	return &domain.Repositories{
 		User:                 implUser.NewUserRepository(db),
 		AccountReadModelRepo: implAccount.NewReadModelRepository(db),
-		Order:                implOrder.NewOrderRepository(db),
+		OrderReadModelRepo:   implOrder.NewReadModelRepository(db),
 		Portfolio:            implPortfolio.NewPortfolioRepository(db),
 		Stock:                implMarket.NewStockRepository(db),
 		Price:                implMarket.NewPriceRepository(db),

@@ -3,6 +3,7 @@
 import (
 	"net/http"
 	orderUC "trading-stock/internal/application/order"
+	"trading-stock/pkg/response"
 
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
@@ -45,11 +46,10 @@ func (h *OrderHandler) CreateOrder(c echo.Context) error {
 	}
 
 	// Call UseCase
-	accountID := "" // Will let usecase handle getting the primary account natively
 	createdOrder, err := h.orderUseCase.CreateOrder(
 		c.Request().Context(),
 		userID.(string),
-		accountID,
+		orderReq.AccountID,
 		orderReq.Symbol,
 		orderReq.Side,
 		orderReq.Type,
@@ -63,11 +63,11 @@ func (h *OrderHandler) CreateOrder(c echo.Context) error {
 		})
 	}
 
-	return c.JSON(http.StatusCreated, Order{
+	return c.JSON(http.StatusCreated, OrderDTO{
 		OrderID:   createdOrder.ID,
 		Symbol:    createdOrder.Symbol,
 		Side:      string(createdOrder.Side),
-		Type:      string(createdOrder.Type),
+		Type:      string(createdOrder.OrderType),
 		Quantity:  createdOrder.Quantity,
 		Price:     createdOrder.Price,
 		Status:    string(createdOrder.Status),
@@ -113,13 +113,13 @@ func (h *OrderHandler) ListOrders(c echo.Context) error {
 		})
 	}
 
-	var dtoList []Order
+	var dtoList []OrderDTO
 	for _, o := range orders {
-		dtoList = append(dtoList, Order{
+		dtoList = append(dtoList, OrderDTO{
 			OrderID:        o.ID,
 			Symbol:         o.Symbol,
 			Side:           string(o.Side),
-			Type:           string(o.Type),
+			Type:           string(o.OrderType),
 			Quantity:       o.Quantity,
 			FilledQuantity: o.FilledQuantity,
 			Price:          o.Price,
@@ -129,7 +129,7 @@ func (h *OrderHandler) ListOrders(c echo.Context) error {
 	}
 
 	if dtoList == nil {
-		dtoList = make([]Order, 0)
+		dtoList = make([]OrderDTO, 0)
 	}
 
 	return c.JSON(http.StatusOK, ListOrdersResponse{
@@ -146,44 +146,33 @@ func (h *OrderHandler) ListOrders(c echo.Context) error {
 // GET /api/v1/orders/:id
 func (h *OrderHandler) GetOrderDetail(c echo.Context) error {
 	orderID := c.Param("id")
-	userID := c.Get("user_id")
+	userID := c.Get("user_id").(string)
 
-	// TODO: Implement get order detail logic
-	// 1. Get order ID from URL param
-	// 2. Get user ID from context
-	// 3. Verify order belongs to user
-	// 4. Fetch order details from database
-	// 5. Include trade history for this order
-	// 6. Return full order info
+	// 1. Fetch order from repository via usecase
+	o, err := h.orderUseCase.GetOrder(c.Request().Context(), orderID)
+	if err != nil {
+		h.logger.Error("Failed to get order", zap.Error(err), zap.String("orderID", orderID))
+		return response.Error(c, http.StatusNotFound, "Order not found", err.Error())
+	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message": "Get order detail - TODO: implement",
-		"user_id": userID,
-		"data": map[string]interface{}{
-			"order_id":        orderID,
-			"symbol":          "VNM",
-			"side":            "buy",
-			"type":            "limit",
-			"quantity":        100,
-			"filled_quantity": 50,
-			"price":           85000,
-			"average_price":   84500,
-			"status":          "partial_filled",
-			"trades": []map[string]interface{}{
-				{
-					"trade_id":  "trd_001",
-					"quantity":  30,
-					"price":     84000,
-					"timestamp": "2024-01-01T10:01:00Z",
-				},
-				{
-					"trade_id":  "trd_002",
-					"quantity":  20,
-					"price":     85000,
-					"timestamp": "2024-01-01T10:02:00Z",
-				},
-			},
-		},
+	// 2. Verify the order belongs to the requesting user
+	if o.UserID != userID {
+		return response.Error(c, http.StatusForbidden, "Access denied", "you do not own this order")
+	}
+
+	return response.Success(c, http.StatusOK, "Order retrieved", GetOrderDetailResponse{
+		OrderID:        o.ID,
+		AccountID:      o.AccountID,
+		Symbol:         o.Symbol,
+		Side:           string(o.Side),
+		Type:           string(o.OrderType),
+		Quantity:       o.Quantity,
+		FilledQuantity: o.FilledQuantity,
+		Price:          o.Price,
+		AvgFillPrice:   o.AvgFillPrice,
+		Status:         string(o.Status),
+		CreatedAt:      o.CreatedAt,
+		UpdatedAt:      o.UpdatedAt,
 	})
 }
 
@@ -191,47 +180,74 @@ func (h *OrderHandler) GetOrderDetail(c echo.Context) error {
 // DELETE /api/v1/orders/:id
 func (h *OrderHandler) CancelOrder(c echo.Context) error {
 	orderID := c.Param("id")
-	userID := c.Get("user_id")
+	userID := c.Get("user_id").(string)
 
-	// TODO: Implement cancel order logic
-	// 1. Get order ID and user ID
-	// 2. Verify order belongs to user
-	// 3. Check if order can be cancelled (not filled/cancelled)
-	// 4. Send cancel request to matching engine
-	// 5. Update order status to "cancelled"
-	// 6. Release frozen balance
-	// 7. Return success
+	// 1. Fetch order to verify ownership before cancelling
+	o, err := h.orderUseCase.GetOrder(c.Request().Context(), orderID)
+	if err != nil {
+		h.logger.Error("Order not found for cancel", zap.Error(err), zap.String("orderID", orderID))
+		return response.Error(c, http.StatusNotFound, "Order not found", err.Error())
+	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message":  "Order cancelled successfully",
-		"user_id":  userID,
+	// 2. Verify ownership
+	if o.UserID != userID {
+		return response.Error(c, http.StatusForbidden, "Access denied", "you do not own this order")
+	}
+
+	// 3. Cancel via usecase (also releases reserved BUY funds internally)
+	if err := h.orderUseCase.CancelOrder(c.Request().Context(), orderID); err != nil {
+		h.logger.Error("Failed to cancel order", zap.Error(err), zap.String("orderID", orderID))
+		return response.Error(c, http.StatusBadRequest, "Failed to cancel order", err.Error())
+	}
+
+	h.logger.Info("Order cancelled", zap.String("orderID", orderID), zap.String("userID", userID))
+	return response.Success(c, http.StatusOK, "Order cancelled successfully", map[string]string{
 		"order_id": orderID,
 	})
 }
 
 // UpdateOrder updates an order (protected)
 // PUT /api/v1/orders/:id
+// In stock trading, modification is implemented as cancel-then-recreate:
+// the old order is cancelled (releasing any reserved funds) and a new order is
+// placed with the updated price / quantity.
 func (h *OrderHandler) UpdateOrder(c echo.Context) error {
 	orderID := c.Param("id")
-	userID := c.Get("user_id")
+	userID := c.Get("user_id").(string)
 
-	// TODO: Implement update order logic
-	// 1. Get order ID and user ID
-	// 2. Verify order belongs to user
-	// 3. Parse request body (new_price, new_quantity)
-	// 4. Validate new values
-	// 5. Cancel old order
-	// 6. Create new order with updated values
-	// 7. Return updated order info
-	// Note: In stock trading, usually cancel + create new order instead of update
+	// 1. Parse and validate request body
+	var req UpdateOrderRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "Invalid request body", err.Error())
+	}
+	if req.Price <= 0 || req.Quantity <= 0 {
+		return response.Error(c, http.StatusBadRequest, "Invalid request body", "price and quantity must be greater than 0")
+	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message": "Order updated successfully",
-		"user_id": userID,
-		"data": map[string]interface{}{
-			"order_id":  orderID,
-			"new_price": 86000,
-			"status":    "pending",
-		},
+	// 2. Delegate to usecase (ownership check + cancel + recreate happens there)
+	updatedOrder, err := h.orderUseCase.UpdateOrder(c.Request().Context(), userID, orderID, req.Price, req.Quantity)
+	if err != nil {
+		h.logger.Error("Failed to update order",
+			zap.Error(err),
+			zap.String("orderID", orderID),
+			zap.String("userID", userID),
+		)
+		return response.Error(c, http.StatusBadRequest, "Failed to update order", err.Error())
+	}
+
+	h.logger.Info("Order updated", zap.String("newOrderID", updatedOrder.ID), zap.String("userID", userID))
+	return response.Success(c, http.StatusOK, "Order updated successfully", GetOrderDetailResponse{
+		OrderID:        updatedOrder.ID,
+		AccountID:      updatedOrder.AccountID,
+		Symbol:         updatedOrder.Symbol,
+		Side:           string(updatedOrder.Side),
+		Type:           string(updatedOrder.OrderType),
+		Quantity:       updatedOrder.Quantity,
+		FilledQuantity: updatedOrder.FilledQuantity,
+		Price:          updatedOrder.Price,
+		AvgFillPrice:   updatedOrder.AvgFillPrice,
+		Status:         string(updatedOrder.Status),
+		CreatedAt:      updatedOrder.CreatedAt,
+		UpdatedAt:      updatedOrder.UpdatedAt,
 	})
 }

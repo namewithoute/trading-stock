@@ -11,6 +11,11 @@ type AccountListingResponse struct {
 	Total    int               `json:"total"`
 }
 
+type CreateAccountRequest struct {
+	AccountType string `json:"account_type" validate:"required,oneof=cash margin"`
+	Currency    string `json:"currency" validate:"required,iso4217"`
+}
+
 // AccountResponse is the serialisable DTO sent to clients.
 // It is derived from the AccountReadModel (query side of CQRS).
 type AccountResponse struct {

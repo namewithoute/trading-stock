@@ -1,0 +1,503 @@
+{
+  "info": {
+    "_postman_id": "trading-stock-api-v1",
+    "name": "Trading Stock API",
+    "description": "Auth, Account & Order domain endpoints.\n\nWorkflow:\n1. Register → Login → copy `access_token` into collection variable `ACCESS_TOKEN`\n2. Create Account → copy account `id` into `ACCOUNT_ID`\n3. Place orders using `ORDER_ID` variable\n\nBase URL: `{{BASE_URL}}` (default: http://localhost:8080)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "BASE_URL",     "value": "http://localhost:8080", "type": "string" },
+    { "key": "ACCESS_TOKEN", "value": "",                      "type": "string" },
+    { "key": "REFRESH_TOKEN","value": "",                      "type": "string" },
+    { "key": "USER_ID",      "value": "",                      "type": "string" },
+    { "key": "ACCOUNT_ID",   "value": "",                      "type": "string" },
+    { "key": "ORDER_ID",     "value": "",                      "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "description": "Registration, login, token refresh and logout.",
+      "item": [
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const body = pm.response.json();",
+                  "  pm.collectionVariables.set('USER_ID', body.data.user_id);",
+                  "  pm.collectionVariables.set('ACCESS_TOKEN', body.data.token);",
+                  "  pm.test('Register success', () => pm.response.to.have.status(201));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{BASE_URL}}/api/v1/auth/register", "host": ["{{BASE_URL}}"], "path": ["api","v1","auth","register"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"trader@example.com\",\n  \"password\": \"SecurePass123\",\n  \"name\": \"Trader One\"\n}"
+            },
+            "description": "POST /api/v1/auth/register\n\nCreates a new user account and returns a JWT token.\nAuto-saves `USER_ID` and `ACCESS_TOKEN` to collection variables."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Registration successful\",\n  \"code\": 0,\n  \"data\": {\n    \"user_id\": \"uuid-here\",\n    \"email\": \"trader@example.com\",\n    \"name\": \"Trader One\",\n    \"token\": \"eyJ...\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  pm.collectionVariables.set('ACCESS_TOKEN',  body.data.access_token);",
+                  "  pm.collectionVariables.set('REFRESH_TOKEN', body.data.refresh_token);",
+                  "  pm.collectionVariables.set('USER_ID',       body.data.user_id);",
+                  "  pm.test('Login success', () => pm.response.to.have.status(200));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{BASE_URL}}/api/v1/auth/login", "host": ["{{BASE_URL}}"], "path": ["api","v1","auth","login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"trader@example.com\",\n  \"password\": \"SecurePass123\"\n}"
+            },
+            "description": "POST /api/v1/auth/login\n\nAutomatically saves `ACCESS_TOKEN`, `REFRESH_TOKEN`, `USER_ID` to collection variables."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Login successful\",\n  \"code\": 0,\n  \"data\": {\n    \"access_token\": \"eyJ...\",\n    \"refresh_token\": \"eyJ...\",\n    \"user_id\": \"uuid-here\"\n  }\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": false,\n  \"message\": \"invalid credentials\",\n  \"code\": 401\n}"
+            }
+          ]
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  pm.collectionVariables.set('ACCESS_TOKEN', body.data.access_token);",
+                  "  pm.test('Token refreshed', () => pm.response.to.have.status(200));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{BASE_URL}}/api/v1/auth/refresh", "host": ["{{BASE_URL}}"], "path": ["api","v1","auth","refresh"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{REFRESH_TOKEN}}\"\n}"
+            },
+            "description": "POST /api/v1/auth/refresh (public)\n\nExchanges a valid refresh token for a new access token.\nAuto-saves the new `ACCESS_TOKEN`."
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type",  "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ACCESS_TOKEN}}" }
+            ],
+            "url": { "raw": "{{BASE_URL}}/api/v1/auth/logout", "host": ["{{BASE_URL}}"], "path": ["api","v1","auth","logout"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{REFRESH_TOKEN}}\"\n}"
+            },
+            "description": "POST /api/v1/auth/logout (protected)\n\nInvalidates the supplied refresh token so it cannot be re-used.\nRequires: Authorization: Bearer <access_token>"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Logged out successfully\",\n  \"code\": 0\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Account",
+      "description": "Trading account management (create, list, deposit, withdraw).\n\nAll protected routes require: `Authorization: Bearer {{ACCESS_TOKEN}}`",
+      "item": [
+        {
+          "name": "Verify Account Exists (public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/api/v1/accounts/verify/{{ACCOUNT_ID}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api","v1","accounts","verify","{{ACCOUNT_ID}}"]
+            },
+            "description": "GET /api/v1/accounts/verify/:account_number (public)\n\nChecks whether an account number exists and is ACTIVE.\nUseful for validating transfer recipients."
+          },
+          "response": [
+            {
+              "name": "200 Active",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Account verified successfully\",\n  \"data\": {\n    \"id\": \"uuid\",\n    \"account_type\": \"standard\",\n    \"money\": { \"balance\": 10000000, \"buying_power\": 10000000, \"currency\": \"VND\" },\n    \"status\": \"ACTIVE\"\n  }\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\n  \"success\": false,\n  \"message\": \"Account not found\",\n  \"code\": 404\n}"
+            }
+          ]
+        },
+        {
+          "name": "List Accounts",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{ACCESS_TOKEN}}" }],
+            "url": { "raw": "{{BASE_URL}}/api/v1/accounts", "host": ["{{BASE_URL}}"], "path": ["api","v1","accounts"] },
+            "description": "GET /api/v1/accounts (protected)\n\nReturns all trading accounts owned by the authenticated user."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Accounts retrieved successfully\",\n  \"data\": {\n    \"user_id\": \"uuid\",\n    \"accounts\": [\n      {\n        \"id\": \"uuid\",\n        \"account_type\": \"standard\",\n        \"money\": { \"balance\": 10000000, \"buying_power\": 10000000, \"currency\": \"VND\" },\n        \"status\": \"ACTIVE\"\n      }\n    ],\n    \"total\": 1\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Account",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const body = pm.response.json();",
+                  "  pm.collectionVariables.set('ACCOUNT_ID', body.data.id);",
+                  "  pm.test('Account created', () => pm.response.to.have.status(201));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type",  "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ACCESS_TOKEN}}" }
+            ],
+            "url": { "raw": "{{BASE_URL}}/api/v1/accounts", "host": ["{{BASE_URL}}"], "path": ["api","v1","accounts"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_type\": \"standard\",\n  \"currency\": \"VND\"\n}"
+            },
+            "description": "POST /api/v1/accounts (protected)\n\nCreates a new trading account for the authenticated user.\n`account_type`: `standard` | `margin`\n`currency`: ISO 4217 code e.g. `VND`, `USD`\n\nAuto-saves the new account `id` to `ACCOUNT_ID`."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Account created successfully\",\n  \"data\": {\n    \"id\": \"uuid\",\n    \"account_type\": \"standard\",\n    \"money\": { \"balance\": 0, \"buying_power\": 0, \"currency\": \"VND\" },\n    \"status\": \"ACTIVE\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Account Detail",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{ACCESS_TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/api/v1/accounts/{{ACCOUNT_ID}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api","v1","accounts","{{ACCOUNT_ID}}"]
+            },
+            "description": "GET /api/v1/accounts/:id (protected)\n\nReturns full details for a single account.\nReturns 403 if the account does not belong to the authenticated user."
+          }
+        },
+        {
+          "name": "Deposit",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type",  "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ACCESS_TOKEN}}" }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/v1/accounts/{{ACCOUNT_ID}}/deposit",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api","v1","accounts","{{ACCOUNT_ID}}","deposit"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 10000000\n}"
+            },
+            "description": "POST /api/v1/accounts/:id/deposit (protected)\n\nAdds funds to the account balance.\n`amount` must be > 0."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Deposit successful\",\n  \"data\": {\n    \"id\": \"uuid\",\n    \"account_type\": \"standard\",\n    \"money\": { \"balance\": 10000000, \"buying_power\": 10000000, \"currency\": \"VND\" },\n    \"status\": \"ACTIVE\"\n  }\n}"
+            },
+            {
+              "name": "400 Invalid Amount",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"success\": false,\n  \"message\": \"Invalid amount\",\n  \"error\": \"Amount must be greater than zero\",\n  \"code\": 400\n}"
+            }
+          ]
+        },
+        {
+          "name": "Withdraw",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type",  "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ACCESS_TOKEN}}" }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/v1/accounts/{{ACCOUNT_ID}}/withdraw",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api","v1","accounts","{{ACCOUNT_ID}}","withdraw"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 500000\n}"
+            },
+            "description": "POST /api/v1/accounts/:id/withdraw (protected)\n\nWithdraws funds from the account.\nFails with 400 if balance is insufficient or amount <= 0."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Withdraw successful\",\n  \"data\": {\n    \"id\": \"uuid\",\n    \"money\": { \"balance\": 9500000, \"buying_power\": 9500000, \"currency\": \"VND\" },\n    \"status\": \"ACTIVE\"\n  }\n}"
+            },
+            {
+              "name": "400 Insufficient Balance",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"success\": false,\n  \"message\": \"Failed to withdraw\",\n  \"error\": \"insufficient balance\",\n  \"code\": 400\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Order",
+      "description": "Order lifecycle: place, list, view, cancel, and update orders.\n\nAll routes require: `Authorization: Bearer {{ACCESS_TOKEN}}`\n\nOrder Types:  `MARKET` | `LIMIT` | `STOP_LOSS` | `STOP_LIMIT`\nOrder Sides:  `BUY` | `SELL`\nOrder Status: `PENDING` | `PARTIALLY_FILLED` | `FILLED` | `CANCELLED` | `REJECTED` | `EXPIRED`",
+      "item": [
+        {
+          "name": "Create Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const body = pm.response.json();",
+                  "  pm.collectionVariables.set('ORDER_ID', body.order_id || (body.data && body.data.order_id));",
+                  "  pm.test('Order created', () => pm.response.to.have.status(201));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type",  "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ACCESS_TOKEN}}" }
+            ],
+            "url": { "raw": "{{BASE_URL}}/api/v1/orders", "host": ["{{BASE_URL}}"], "path": ["api","v1","orders"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbol\":   \"VNM\",\n  \"side\":     \"BUY\",\n  \"type\":     \"LIMIT\",\n  \"quantity\": 100,\n  \"price\":    85000\n}"
+            },
+            "description": "POST /api/v1/orders (protected)\n\nPlaces a new order for the authenticated user.\n- For BUY orders, funds are automatically reserved from the account balance.\n- Order is published to Kafka `orders.matching.new` for the matching engine.\n\nAuto-saves the new `ORDER_ID`."
+          },
+          "response": [
+            {
+              "name": "201 Created — BUY LIMIT",
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"order_id\":        \"uuid\",\n  \"symbol\":          \"VNM\",\n  \"side\":            \"BUY\",\n  \"type\":            \"LIMIT\",\n  \"quantity\":        100,\n  \"filled_quantity\": 0,\n  \"price\":           85000,\n  \"status\":          \"PENDING\",\n  \"created_at\":      \"2026-02-23T10:00:00Z\"\n}"
+            },
+            {
+              "name": "400 Insufficient Funds",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"success\": false,\n  \"message\": \"Failed to create order\",\n  \"error\": \"failed to reserve funds: insufficient buying power\",\n  \"code\": 400\n}"
+            }
+          ]
+        },
+        {
+          "name": "List Orders",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{ACCESS_TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/api/v1/orders?status=PENDING&symbol=VNM&page=1&limit=20",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api","v1","orders"],
+              "query": [
+                { "key": "status", "value": "PENDING",  "description": "Filter by status: PENDING | PARTIALLY_FILLED | FILLED | CANCELLED" },
+                { "key": "symbol", "value": "VNM",      "description": "Filter by ticker symbol" },
+                { "key": "page",   "value": "1",        "description": "Page number (default: 1)" },
+                { "key": "limit",  "value": "20",       "description": "Page size (default: 20)" }
+              ]
+            },
+            "description": "GET /api/v1/orders (protected)\n\nList orders belonging to the authenticated user.\nAll query parameters are optional."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"orders\": [\n    {\n      \"order_id\":        \"uuid\",\n      \"symbol\":          \"VNM\",\n      \"side\":            \"BUY\",\n      \"type\":            \"LIMIT\",\n      \"quantity\":        100,\n      \"filled_quantity\": 0,\n      \"price\":           85000,\n      \"status\":          \"PENDING\",\n      \"created_at\":      \"2026-02-23T10:00:00Z\"\n    }\n  ],\n  \"pagination\": { \"page\": 1, \"limit\": 20, \"total\": 1 }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Order Detail",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{ACCESS_TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/api/v1/orders/{{ORDER_ID}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api","v1","orders","{{ORDER_ID}}"]
+            },
+            "description": "GET /api/v1/orders/:id (protected)\n\nReturns full order detail including `avg_fill_price` and `account_id`.\nReturns 403 if the order does not belong to the authenticated user."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Order retrieved\",\n  \"data\": {\n    \"order_id\":        \"uuid\",\n    \"account_id\":      \"uuid\",\n    \"symbol\":          \"VNM\",\n    \"side\":            \"BUY\",\n    \"type\":            \"LIMIT\",\n    \"quantity\":        100,\n    \"filled_quantity\": 50,\n    \"price\":           85000,\n    \"avg_fill_price\":  84500,\n    \"status\":          \"PARTIALLY_FILLED\",\n    \"created_at\":      \"2026-02-23T10:00:00Z\",\n    \"updated_at\":      \"2026-02-23T10:05:00Z\"\n  }\n}"
+            },
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "body": "{\n  \"success\": false,\n  \"message\": \"Access denied\",\n  \"error\": \"you do not own this order\",\n  \"code\": 403\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\n  \"success\": false,\n  \"message\": \"Order not found\",\n  \"code\": 404\n}"
+            }
+          ]
+        },
+        {
+          "name": "Cancel Order",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{ACCESS_TOKEN}}" }],
+            "url": {
+              "raw": "{{BASE_URL}}/api/v1/orders/{{ORDER_ID}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api","v1","orders","{{ORDER_ID}}"]
+            },
+            "description": "DELETE /api/v1/orders/:id (protected)\n\nCancels a PENDING or PARTIALLY_FILLED order.\n- Reserved funds for the unfilled quantity are automatically released back to the account.\n- Returns 400 if the order is FILLED, CANCELLED, REJECTED, or EXPIRED."
+          },
+          "response": [
+            {
+              "name": "200 Cancelled",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Order cancelled successfully\",\n  \"data\": { \"order_id\": \"uuid\" }\n}"
+            },
+            {
+              "name": "400 Cannot Cancel",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"success\": false,\n  \"message\": \"Failed to cancel order\",\n  \"error\": \"cannot cancel order with status FILLED: invalid order status\",\n  \"code\": 400\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Order",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type",  "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ACCESS_TOKEN}}" }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/v1/orders/{{ORDER_ID}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api","v1","orders","{{ORDER_ID}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"price\":    86000,\n  \"quantity\": 150\n}"
+            },
+            "description": "PUT /api/v1/orders/:id (protected)\n\nModifies a PENDING order's price and/or quantity.\nInternally implemented as cancel-then-recreate:\n  1. Old order is cancelled (reserved funds released)\n  2. New order is created at the new price/quantity (funds re-reserved)\n\nReturns 400 if the order is not in PENDING status.\nThe response contains the **new** order (new `order_id`)."
+          },
+          "response": [
+            {
+              "name": "200 Updated (new order returned)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Order updated successfully\",\n  \"data\": {\n    \"order_id\":        \"new-uuid\",\n    \"account_id\":      \"uuid\",\n    \"symbol\":          \"VNM\",\n    \"side\":            \"BUY\",\n    \"type\":            \"LIMIT\",\n    \"quantity\":        150,\n    \"filled_quantity\": 0,\n    \"price\":           86000,\n    \"avg_fill_price\":  0,\n    \"status\":          \"PENDING\",\n    \"created_at\":      \"2026-02-23T10:10:00Z\",\n    \"updated_at\":      \"2026-02-23T10:10:00Z\"\n  }\n}"
+            },
+            {
+              "name": "400 Cannot Update",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"success\": false,\n  \"message\": \"Failed to update order\",\n  \"error\": \"order cannot be modified with status PARTIALLY_FILLED: invalid order status\",\n  \"code\": 400\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

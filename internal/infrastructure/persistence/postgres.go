@@ -98,8 +98,9 @@ func AutoMigrateModels(db *gorm.DB, log *zap.Logger) error {
 		&infraAccount.AccountEventModel{},  // append-only write store
 		&infraAccount.AccountReadModelDB{}, // denormalised read projection
 
-		// Order
-		&infraOrder.OrderModel{},
+		// Order – Event Sourcing tables
+		&infraOrder.OrderEventModel{},  // append-only write store
+		&infraOrder.OrderReadModelDB{}, // denormalised read projection
 
 		// Portfolio
 		&infraPortfolio.PositionModel{},

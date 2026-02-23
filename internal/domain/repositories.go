@@ -30,7 +30,10 @@ type Repositories struct {
 	AccountReadModelRepo account.ReadModelRepository
 
 	// ── Order Context ─────────────────────────────────────────────────
-	Order order.Repository
+	// Write side: order.Repository (EventSourcingService) is injected directly
+	// in wire.go (depends on Kafka so cannot be wired in NewRepositories).
+	// Query (read) side served by ReadModelRepository.
+	OrderReadModelRepo order.ReadModelRepository
 
 	// ── Portfolio Context ─────────────────────────────────────────────
 	Portfolio portfolio.Repository

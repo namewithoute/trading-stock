@@ -12,11 +12,11 @@ import (
 	userUC "trading-stock/internal/application/user"
 	"trading-stock/internal/domain"
 	domainAccount "trading-stock/internal/domain/account"
+	domainOrder "trading-stock/internal/domain/order"
 	"trading-stock/internal/domain/user"
 	"trading-stock/pkg/jwtservice"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
 )
 
@@ -35,37 +35,43 @@ type Usecases struct {
 
 // NewUsecases constructs all use cases.
 //
-// ── Dependency Inversion Principle ─────────────────────────────────────────
+// ── Dependency Inversion Principle ─────────────────────────────────────
 //
 //	This function accepts ONLY interfaces defined in the Domain Layer.
 //	It must NEVER import or reference Infrastructure packages directly.
 //
-//	Concrete infra implementations (e.g. EventSourcingService) are built
-//	in wire.go and passed in as their Domain interface types.
+// ── Parameters ──────────────────────────────────────────────
 //
-// ── Parameters ──────────────────────────────────────────────────────────────
-//
-//	repos           – all domain repository interfaces (from infrastructure layer)
-//	hasher          – password hashing port (domain/user.PasswordHasher)
-//	jwtSvc          – JWT utility (shared pkg; no domain concepts leak)
-//	redis           – Redis client (technical utility, not a domain concept)
-//	kafkaWriter     – Kafka writer (technical utility)
-//	accountEventSvc – Event Sourcing port for Account (domain.EventSourcingServicePort)
-//	logger          – structured logger
+//	repos        – all domain repository interfaces (from infrastructure layer)
+//	hasher       – password hashing port (domain/user.PasswordHasher)
+//	jwtSvc       – JWT utility (shared pkg; no domain concepts leak)
+//	redis        – Redis client (technical utility, not a domain concept)
+//	accountRepo  – Event Sourcing port for Account (domain.Repository)
+//	orderRepo    – Event Sourcing port for Order (domain.Repository)
+//	logger       – structured logger
 func NewUsecases(
 	repos *domain.Repositories,
 	hasher user.PasswordHasher,
 	jwtSvc jwtservice.Service,
 	redis *redis.Client,
-	kafkaWriter *kafka.Writer,
-	// Account Event Sourcing port – injected as a domain interface, built in wire.go
+	// Account Event Sourcing port – injected as domain interface, built in wire.go
 	accountRepo domainAccount.Repository,
+	// Order Event Sourcing port – injected as domain interface, built in wire.go
+	orderRepo domainOrder.Repository,
 	logger *zap.Logger,
 ) *Usecases {
 	// Account use case built once and shared with Order (ReserveFunds / ReleaseFunds).
 	accountUC := account.NewUseCase(
 		accountRepo,                // domain.Repository (infra implements via Event Sourcing)
 		repos.AccountReadModelRepo, // ReadModelRepository (domain interface)
+		logger,
+	)
+
+	// Order use case: write side via Event Sourcing, read side via ReadModelRepository.
+	orderUC := order.NewUseCase(
+		orderRepo,                // domain.Repository (ES write side)
+		repos.OrderReadModelRepo, // ReadModelRepository (query side)
+		accountUC,                // CQRS: ReserveFunds / ReleaseFunds
 		logger,
 	)
 
@@ -81,11 +87,10 @@ func NewUsecases(
 		//          reads go through the Read Model repository.
 		Account: accountUC,
 
-		// Order: no longer uses the legacy account.Repository — ReserveFunds /
-		// ReleaseFunds are issued as CQRS commands through the account UseCase.
-		Order: order.NewUseCase(
-			repos.Order, accountUC, kafkaWriter, logger,
-		),
+		// Order: write commands go through Event Sourcing port;
+		//        reads go through the Read Model repository.
+		Order: orderUC,
+
 		Portfolio: portfolio.NewUseCase(
 			repos.Portfolio, logger,
 		),
@@ -96,7 +101,7 @@ func NewUsecases(
 			repos.Trade, logger,
 		),
 		Admin: admin.NewUseCase(
-			repos.User, repos.Order, logger,
+			repos.User, repos.OrderReadModelRepo, logger,
 		),
 		Risk: risk.NewUseCase(
 			repos.RiskLimit, repos.RiskMetrics, repos.RiskAlert, logger,

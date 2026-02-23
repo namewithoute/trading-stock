@@ -4,6 +4,7 @@ import (
 	"trading-stock/internal/application"
 	"trading-stock/internal/infrastructure"
 	infraAccount "trading-stock/internal/infrastructure/account"
+	infraOrder "trading-stock/internal/infrastructure/order"
 	infraUser "trading-stock/internal/infrastructure/user"
 	"trading-stock/internal/presentation/handler"
 	"trading-stock/internal/presentation/router"
@@ -63,7 +64,25 @@ func (a *App) wire() error {
 	)
 	a.Logger.Info("[ Infrastructure ] Account Projector initialised")
 
-	// ── 2. Application Layer ──────────────────────────────────────────
+	// ── 1d. Order Event Sourcing infrastructure ─────────────────────────────
+	orderEventStore := infraOrder.NewEventStore(a.DB)
+	orderEventSvc := infraOrder.NewEventSourcingService(
+		orderEventStore,
+		a.Kafka,
+		a.Logger,
+	)
+	a.Logger.Info("[ Infrastructure ] Order EventSourcing service initialised")
+
+	// ── 1e. Order Projector (Kafka consumer → read model) ─────────────────
+	a.OrderProjector = infraOrder.NewOrderProjector(
+		a.Config.Kafka.Brokers,
+		a.Repositories.OrderReadModelRepo,
+		orderEventStore,
+		a.Logger,
+	)
+	a.Logger.Info("[ Infrastructure ] Order Projector initialised")
+
+	// ── 2. Application Layer ───────────────────────────────────────────
 	// All dependencies injected as domain-defined interfaces.
 	// NewUsecases has ZERO import from infrastructure packages.
 	a.Usecases = application.NewUsecases(
@@ -71,8 +90,8 @@ func (a *App) wire() error {
 		hasher,
 		a.JWTService,
 		a.Redis,
-		a.Kafka,
-		accountEventSvc, // injected as domain.Repository (infra implements via Event Sourcing)
+		accountEventSvc, // domain.Repository for account (Event Sourcing)
+		orderEventSvc,   // domain.Repository for order  (Event Sourcing)
 		a.Logger,
 	)
 	a.Logger.Info("[ Application ] Use cases initialised")
