@@ -53,12 +53,12 @@ type eventStore struct {
 }
 
 // NewEventStore creates a new Postgres-backed event store.
-func NewEventStore(db *gorm.DB) domain.EventStore {
+func NewEventStore(db *gorm.DB) EventStore {
 	return &eventStore{db: db}
 }
 
 // AppendEvents saves new events with optimistic concurrency guard.
-func (s *eventStore) AppendEvents(ctx context.Context, aggregateID string, expectedVersion int, events []domain.EventDescriptor) error {
+func (s *eventStore) AppendEvents(ctx context.Context, aggregateID string, expectedVersion int, events []EventDescriptor) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Check the current max version for this aggregate
 		var currentVersion int
@@ -90,7 +90,7 @@ func (s *eventStore) AppendEvents(ctx context.Context, aggregateID string, expec
 }
 
 // LoadEvents fetches all events for an aggregate ordered by version ASC.
-func (s *eventStore) LoadEvents(ctx context.Context, aggregateID string) ([]domain.EventDescriptor, error) {
+func (s *eventStore) LoadEvents(ctx context.Context, aggregateID string) ([]EventDescriptor, error) {
 	var rows []AccountEventModel
 	err := s.db.WithContext(ctx).
 		Where("aggregate_id = ?", aggregateID).
@@ -103,7 +103,7 @@ func (s *eventStore) LoadEvents(ctx context.Context, aggregateID string) ([]doma
 }
 
 // LoadEventsFrom fetches events from a specific version onward.
-func (s *eventStore) LoadEventsFrom(ctx context.Context, aggregateID string, fromVersion int) ([]domain.EventDescriptor, error) {
+func (s *eventStore) LoadEventsFrom(ctx context.Context, aggregateID string, fromVersion int) ([]EventDescriptor, error) {
 	var rows []AccountEventModel
 	err := s.db.WithContext(ctx).
 		Where("aggregate_id = ? AND version > ?", aggregateID, fromVersion).
@@ -115,10 +115,24 @@ func (s *eventStore) LoadEventsFrom(ctx context.Context, aggregateID string, fro
 	return toDescriptors(rows), nil
 }
 
-func toDescriptors(rows []AccountEventModel) []domain.EventDescriptor {
-	descs := make([]domain.EventDescriptor, 0, len(rows))
+// LoadAllDescriptors fetches every event in the store ordered by (aggregate_id, version) ASC.
+// Called once on startup by the Projector to rebuild all read models before switching to
+// live Kafka streaming. In high-volume systems, replace with a paginated cursor.
+func (s *eventStore) LoadAllDescriptors(ctx context.Context) ([]EventDescriptor, error) {
+	var rows []AccountEventModel
+	err := s.db.WithContext(ctx).
+		Order("aggregate_id ASC, version ASC").
+		Find(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("LoadAllDescriptors: %w", err)
+	}
+	return toDescriptors(rows), nil
+}
+
+func toDescriptors(rows []AccountEventModel) []EventDescriptor {
+	descs := make([]EventDescriptor, 0, len(rows))
 	for _, r := range rows {
-		descs = append(descs, domain.EventDescriptor{
+		descs = append(descs, EventDescriptor{
 			ID:          r.ID,
 			AggregateID: r.AggregateID,
 			EventType:   domain.EventType(r.EventType),
@@ -212,7 +226,7 @@ func toReadModelDomain(row *AccountReadModelDB) *domain.AccountReadModel {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // DeserialiseEvent reconstructs a typed DomainEvent from an EventDescriptor.
-func DeserialiseEvent(ed domain.EventDescriptor) (domain.DomainEvent, error) {
+func DeserialiseEvent(ed EventDescriptor) (domain.DomainEvent, error) {
 	switch ed.EventType {
 	case domain.EventAccountCreated:
 		var e domain.AccountCreatedEvent

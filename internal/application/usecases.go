@@ -59,9 +59,16 @@ func NewUsecases(
 	redis *redis.Client,
 	kafkaWriter *kafka.Writer,
 	// Account Event Sourcing port – injected as a domain interface, built in wire.go
-	accountEventSvc domainAccount.EventSourcingServicePort,
+	accountRepo domainAccount.Repository,
 	logger *zap.Logger,
 ) *Usecases {
+	// Account use case built once and shared with Order (ReserveFunds / ReleaseFunds).
+	accountUC := account.NewUseCase(
+		accountRepo,                // domain.Repository (infra implements via Event Sourcing)
+		repos.AccountReadModelRepo, // ReadModelRepository (domain interface)
+		logger,
+	)
+
 	return &Usecases{
 		Auth: auth.NewUseCase(
 			repos.User, hasher, jwtSvc, redis, logger,
@@ -72,14 +79,12 @@ func NewUsecases(
 
 		// Account: write commands go through Event Sourcing port;
 		//          reads go through the Read Model repository.
-		Account: account.NewUseCase(
-			accountEventSvc,            // EventSourcingServicePort (domain interface)
-			repos.AccountReadModelRepo, // ReadModelRepository (domain interface)
-			logger,
-		),
+		Account: accountUC,
 
+		// Order: no longer uses the legacy account.Repository — ReserveFunds /
+		// ReleaseFunds are issued as CQRS commands through the account UseCase.
 		Order: order.NewUseCase(
-			repos.Order, repos.Account, kafkaWriter, logger,
+			repos.Order, accountUC, kafkaWriter, logger,
 		),
 		Portfolio: portfolio.NewUseCase(
 			repos.Portfolio, logger,

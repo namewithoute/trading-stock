@@ -25,8 +25,25 @@ func (a *App) Run() error {
 		projCtx, cancel := context.WithCancel(context.Background())
 		a.projectorCancel = cancel
 
+		// ── Phase 1: Catch-up rebuild (SYNCHRONOUS, blocks HTTP startup) ──────
+		// Replay all historical events from EventStore → upsert all read models.
+		// This guarantees the read model table is fully consistent BEFORE the
+		// service starts accepting traffic and BEFORE the Kafka consumer begins.
+		a.Logger.Info("[ Projector ] Starting catch-up rebuild from EventStore...")
+		if err := a.AccountProjector.Rebuild(projCtx); err != nil {
+			// Non-fatal: log the error but continue. The read model may be stale,
+			// but the Kafka consumer will catch up on new events going forward.
+			a.Logger.Error("[ Projector ] Rebuild failed — service will continue with potentially stale read models",
+				zap.Error(err),
+			)
+		}
+
+		// ── Phase 2: Live streaming (ASYNC goroutine) ─────────────────────────
+		// After rebuild, switch to live Kafka event streaming (StartOffset: LastOffset).
+		// Any events that arrived between Rebuild() finishing and now will be picked
+		// up automatically by the Kafka consumer group offset tracking.
 		go func() {
-			a.Logger.Info("[ Projector ] Account Projector starting...")
+			a.Logger.Info("[ Projector ] Account Projector starting live stream...")
 			a.AccountProjector.Run(projCtx) // blocks until projCtx is cancelled
 			a.Logger.Info("[ Projector ] Account Projector stopped")
 		}()

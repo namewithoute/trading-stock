@@ -18,8 +18,6 @@ import (
 func NewRepositories(db *gorm.DB) *domain.Repositories {
 	return &domain.Repositories{
 		User:                 implUser.NewUserRepository(db),
-		Account:              implAccount.NewAccountRepository(db),
-		AccountEventStore:    implAccount.NewEventStore(db),
 		AccountReadModelRepo: implAccount.NewReadModelRepository(db),
 		Order:                implOrder.NewOrderRepository(db),
 		Portfolio:            implPortfolio.NewPortfolioRepository(db),

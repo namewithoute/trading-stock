@@ -43,11 +43,11 @@ func (a *App) wire() error {
 	a.Logger.Info("[ Infrastructure ] JWT service initialised")
 
 	// ── 1b. Account Event Sourcing infrastructure ─────────────────────
-	// Build concrete EventSourcingService here — the ONLY place that
-	// knows about both Postgres EventStore and Kafka at once.
-	// Passed upward as domain.EventSourcingServicePort (interface).
+	// EventStore is wired here (needs DB) and shared between
+	// EventSourcingService (write path) and Projector (rebuild path).
+	accountEventStore := infraAccount.NewEventStore(a.DB)
 	accountEventSvc := infraAccount.NewEventSourcingService(
-		a.Repositories.AccountEventStore,
+		accountEventStore,
 		a.Kafka,
 		a.Logger,
 	)
@@ -58,7 +58,7 @@ func (a *App) wire() error {
 	a.AccountProjector = infraAccount.NewProjector(
 		a.Config.Kafka.Brokers,              // Kafka broker addresses from config
 		a.Repositories.AccountReadModelRepo, // ReadModelRepository domain interface
-		accountEventSvc,                     // needed to replay aggregate on each event
+		accountEventStore,                   // EventStore — used only during Rebuild()
 		a.Logger,
 	)
 	a.Logger.Info("[ Infrastructure ] Account Projector initialised")
@@ -72,7 +72,7 @@ func (a *App) wire() error {
 		a.JWTService,
 		a.Redis,
 		a.Kafka,
-		accountEventSvc, // injected as EventSourcingServicePort (domain interface)
+		accountEventSvc, // injected as domain.Repository (infra implements via Event Sourcing)
 		a.Logger,
 	)
 	a.Logger.Info("[ Application ] Use cases initialised")

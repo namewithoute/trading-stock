@@ -16,16 +16,16 @@ import (
 // KafkaTopicAccountEvents is the Kafka topic for account domain events.
 const KafkaTopicAccountEvents = "account.events"
 
-// EventSourcingService implements domain.EventSourcingServicePort.
+// EventSourcingService implements domain.Repository.
 //
 // Responsibilities:
 //  1. Load       – deserialise + replay all events from EventStore → Aggregate
 //  2. Save       – serialise new events → AppendEvents (Postgres) → publish (Kafka)
 //
 // Wire rule: only wire.go may construct this struct. All other layers receive
-// it through the EventSourcingServicePort interface.
+// it through the domain.Repository interface.
 type EventSourcingService struct {
-	eventStore domain.EventStore
+	eventStore EventStore
 	publisher  *kafka.Writer
 	logger     *zap.Logger
 }
@@ -34,7 +34,7 @@ type EventSourcingService struct {
 // publisher must be a *kafka.Writer already configured with brokers.
 // Topic is set per-message so one writer can serve multiple topics.
 func NewEventSourcingService(
-	eventStore domain.EventStore,
+	eventStore EventStore,
 	publisher *kafka.Writer,
 	logger *zap.Logger,
 ) *EventSourcingService {
@@ -88,14 +88,14 @@ func (s *EventSourcingService) Save(ctx context.Context, agg *domain.AccountAggr
 	// ── Step 1: Serialise → EventDescriptors ──────────────────────────
 	// Version before these new events = agg.Version - len(changes)
 	baseVersion := agg.Version - len(changes)
-	descriptors := make([]domain.EventDescriptor, 0, len(changes))
+	descriptors := make([]EventDescriptor, 0, len(changes))
 
 	for i, ev := range changes {
 		payload, err := json.Marshal(ev)
 		if err != nil {
 			return fmt.Errorf("marshal event %s: %w", ev.GetEventType(), err)
 		}
-		descriptors = append(descriptors, domain.EventDescriptor{
+		descriptors = append(descriptors, EventDescriptor{
 			ID:          uuid.New().String(),
 			AggregateID: agg.ID,
 			EventType:   ev.GetEventType(),
@@ -140,7 +140,7 @@ func (s *EventSourcingService) Save(ctx context.Context, agg *domain.AccountAggr
 
 // publishToKafka serialises each EventDescriptor as a Kafka message.
 // Key = AggregateID ensures all events for the same account land on the same partition.
-func (s *EventSourcingService) publishToKafka(ctx context.Context, descs []domain.EventDescriptor) error {
+func (s *EventSourcingService) publishToKafka(ctx context.Context, descs []EventDescriptor) error {
 	if s.publisher == nil {
 		return fmt.Errorf("kafka writer is nil – skipping publish")
 	}

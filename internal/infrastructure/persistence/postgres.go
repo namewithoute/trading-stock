@@ -94,8 +94,6 @@ func AutoMigrateModels(db *gorm.DB, log *zap.Logger) error {
 		// User
 		&infraUser.UserModel{},
 
-		// Account – legacy CRUD table (kept for Order balance check)
-		&infraAccount.AccountModel{},
 		// Account – Event Sourcing tables
 		&infraAccount.AccountEventModel{},  // append-only write store
 		&infraAccount.AccountReadModelDB{}, // denormalised read projection

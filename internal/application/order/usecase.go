@@ -5,7 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
-	"trading-stock/internal/domain/account"
+
+	accountApp "trading-stock/internal/application/account"
 	"trading-stock/internal/domain/order"
 
 	"github.com/google/uuid"
@@ -22,14 +23,14 @@ type UseCase interface {
 }
 
 type useCase struct {
-	orderRepo   order.Repository
-	accountRepo account.Repository
-	kafka       *kafka.Writer
-	logger      *zap.Logger
+	orderRepo  order.Repository
+	accountSvc accountApp.UseCase // CQRS: replaces the legacy account.Repository
+	kafka      *kafka.Writer
+	logger     *zap.Logger
 }
 
-func NewUseCase(orderRepo order.Repository, accountRepo account.Repository, kafka *kafka.Writer, logger *zap.Logger) UseCase {
-	return &useCase{orderRepo: orderRepo, accountRepo: accountRepo, kafka: kafka, logger: logger}
+func NewUseCase(orderRepo order.Repository, accountSvc accountApp.UseCase, kafka *kafka.Writer, logger *zap.Logger) UseCase {
+	return &useCase{orderRepo: orderRepo, accountSvc: accountSvc, kafka: kafka, logger: logger}
 }
 
 func (s *useCase) CreateOrder(ctx context.Context, userID, accountID, symbol, side, orderType string, price float64, quantity int) (*order.Order, error) {
@@ -48,7 +49,7 @@ func (s *useCase) CreateOrder(ctx context.Context, userID, accountID, symbol, si
 
 	// [Business Rule] 1. Get primary account if accountID is not provided
 	if accountID == "" {
-		acc, err := s.accountRepo.GetPrimaryAccount(ctx, userID)
+		acc, err := s.accountSvc.GetPrimaryAccountByUser(ctx, accountApp.GetPrimaryAccountByUserQuery{UserID: userID})
 		if err != nil {
 			return nil, fmt.Errorf("failed to get user account: %w", err)
 		}
@@ -59,8 +60,11 @@ func (s *useCase) CreateOrder(ctx context.Context, userID, accountID, symbol, si
 
 	// [Business Rule] 2. Lock Balance / Reserve Funds for BUY orders
 	if o.Side == order.SideBuy {
-		totalCost := float64(o.Quantity) * o.Price // If Market order, price logic might differ
-		err := s.accountRepo.ReserveFunds(ctx, o.AccountID, totalCost)
+		totalCost := float64(o.Quantity) * o.Price
+		_, err := s.accountSvc.ReserveFunds(ctx, accountApp.ReserveFundsCommand{
+			AccountID: o.AccountID,
+			Amount:    totalCost,
+		})
 		if err != nil {
 			// e.g. ErrInsufficientBuyingPower
 			return nil, fmt.Errorf("failed to reserve funds: %w", err)
@@ -75,7 +79,10 @@ func (s *useCase) CreateOrder(ctx context.Context, userID, accountID, symbol, si
 		s.logger.Error("Failed to create order in repo", zap.Error(err))
 		// [Rollback Rule] Must release funds if DB insert fails!
 		if o.Side == order.SideBuy {
-			_ = s.accountRepo.ReleaseFunds(ctx, o.AccountID, float64(o.Quantity)*o.Price)
+			_, _ = s.accountSvc.ReleaseFunds(ctx, accountApp.ReleaseFundsCommand{
+				AccountID: o.AccountID,
+				Amount:    float64(o.Quantity) * o.Price,
+			})
 		}
 		return nil, err
 	}

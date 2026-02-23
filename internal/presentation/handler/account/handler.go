@@ -33,7 +33,7 @@ func (h *AccountHandler) VerifyAccountExists(c echo.Context) error {
 		return response.Error(c, http.StatusBadRequest, "Account number is required", "account_number_empty")
 	}
 
-	acc, err := h.accountUseCase.GetAccount(c.Request().Context(), accountNumber)
+	acc, err := h.accountUseCase.GetAccount(c.Request().Context(), accountUC.GetAccountQuery{AccountID: accountNumber})
 	if err != nil {
 		h.logger.Error("Failed to get account", zap.Error(err))
 		return response.Error(c, http.StatusInternalServerError, "Failed to get account", err.Error())
@@ -63,7 +63,7 @@ func (h *AccountHandler) ListAccounts(c echo.Context) error {
 		return response.Error(c, http.StatusUnauthorized, "User ID not found in context", "unauthorized")
 	}
 
-	accounts, err := h.accountUseCase.ListAccounts(c.Request().Context(), userID.(string))
+	accounts, err := h.accountUseCase.ListAccounts(c.Request().Context(), accountUC.ListAccountsQuery{UserID: userID.(string)})
 	if err != nil {
 		h.logger.Error("Failed to list accounts", zap.Error(err))
 		return response.Error(c, http.StatusInternalServerError, "Failed to list accounts", err.Error())
@@ -91,7 +91,7 @@ func (h *AccountHandler) CreateAccount(c echo.Context) error {
 		return response.Error(c, http.StatusUnauthorized, "User ID not found in context", "unauthorized")
 	}
 
-	acc, err := h.accountUseCase.CreateAccount(c.Request().Context(), userID.(string))
+	acc, err := h.accountUseCase.CreateAccount(c.Request().Context(), accountUC.CreateAccountCommand{UserID: userID.(string)})
 	if err != nil {
 		h.logger.Error("Failed to create account", zap.Error(err), zap.String("userID", userID.(string)))
 		return response.Error(c, http.StatusInternalServerError, "Failed to create account", err.Error())
@@ -114,20 +114,20 @@ func (h *AccountHandler) GetAccountDetail(c echo.Context) error {
 		return response.Error(c, http.StatusUnauthorized, "User ID not found in context", "unauthorized")
 	}
 
-	acc, err := h.accountUseCase.GetAccount(c.Request().Context(), accountID)
+	acc, err := h.accountUseCase.GetAccountByUser(c.Request().Context(), accountUC.GetAccountByUserQuery{
+		AccountID: accountID,
+		UserID:    userID.(string),
+	})
 	if err != nil {
 		h.logger.Error("Failed to get account details", zap.Error(err), zap.String("accountID", accountID))
+		if err.Error() == "unauthorized account access" {
+			return response.Error(c, http.StatusForbidden, "You don't have permission to access this account", "forbidden")
+		}
 		return response.Error(c, http.StatusInternalServerError, "Failed to get account details", err.Error())
 	}
 
 	if acc == nil {
 		return response.Error(c, http.StatusNotFound, "Account not found", account.ErrAccountNotFound.Error())
-	}
-
-	// Basic authorization check: verify the account actually belongs to this user
-	if acc.UserID != userID.(string) {
-		h.logger.Warn("Unauthorized account access attempt", zap.String("userID", userID.(string)), zap.String("accountUserID", acc.UserID))
-		return response.Error(c, http.StatusForbidden, "You don't have permission to access this account", "forbidden")
 	}
 
 	return response.Success(c, http.StatusOK, "Account details retrieved", ToAccountResponse(acc))
@@ -156,7 +156,10 @@ func (h *AccountHandler) Deposit(c echo.Context) error {
 		return response.Error(c, http.StatusBadRequest, "Invalid amount", "Amount must be greater than zero")
 	}
 
-	acc, err := h.accountUseCase.Deposit(c.Request().Context(), accountID, userID.(string), req.Amount)
+	acc, err := h.accountUseCase.Deposit(c.Request().Context(), accountUC.DepositCommand{
+		AccountID: accountID,
+		Amount:    req.Amount,
+	})
 	if err != nil {
 		h.logger.Error("Failed to deposit to account", zap.Error(err), zap.String("accountID", accountID))
 
@@ -194,7 +197,10 @@ func (h *AccountHandler) Withdraw(c echo.Context) error {
 		return response.Error(c, http.StatusBadRequest, "Invalid amount", "Amount must be greater than zero")
 	}
 
-	acc, err := h.accountUseCase.Withdraw(c.Request().Context(), accountID, userID.(string), req.Amount)
+	acc, err := h.accountUseCase.Withdraw(c.Request().Context(), accountUC.WithdrawCommand{
+		AccountID: accountID,
+		Amount:    req.Amount,
+	})
 	if err != nil {
 		h.logger.Error("Failed to withdraw from account", zap.Error(err), zap.String("accountID", accountID))
 

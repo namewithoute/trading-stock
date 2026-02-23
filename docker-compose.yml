@@ -25,19 +25,31 @@ services:
     networks:
       - trading_network
 
-  # 3. Kafka Stack (Official Apache Image with KRaft)
+  # 3. Kafka Stack (KRaft mode — no ZooKeeper)
+  #
+  # Listener layout:
+  #   EXTERNAL  → localhost:9092        — for the Go app running on host machine
+  #   INTERNAL  → trading_kafka:29092   — for containers inside Docker network (kafka-ui)
+  #   CONTROLLER→ trading_kafka:9093    — Raft controller (internal only)
   kafka:
     image: apache/kafka:latest
     container_name: trading_kafka
     ports:
-      - "9092:9092"
+      - "9092:9092"   # EXTERNAL: exposed to host machine
     environment:
       - KAFKA_NODE_ID=1
       - KAFKA_PROCESS_ROLES=broker,controller
-      - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092,INTERNAL://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093
-      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092,INTERNAL://trading_kafka:29092
+
+      # Bind on all interfaces for each listener
+      - KAFKA_LISTENERS=EXTERNAL://0.0.0.0:9092,INTERNAL://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093
+
+      # What Kafka advertises to clients:
+      #   EXTERNAL → host machine connects via localhost:9092
+      #   INTERNAL → other Docker containers connect via trading_kafka:29092
+      - KAFKA_ADVERTISED_LISTENERS=EXTERNAL://localhost:9092,INTERNAL://trading_kafka:29092
+
       - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
-      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,INTERNAL:PLAINTEXT
       - KAFKA_CONTROLLER_QUORUM_VOTERS=1@trading_kafka:9093
       - KAFKA_INTER_BROKER_LISTENER_NAME=INTERNAL
       - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
@@ -46,7 +58,8 @@ services:
     networks:
       - trading_network
 
-  # 4. Kafka UI (Truy cập: http://localhost:8085)
+  # 4. Kafka UI (http://localhost:8085)
+  #    Uses INTERNAL listener — it's inside the Docker network
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: trading_kafka_ui
@@ -54,7 +67,8 @@ services:
       - "8085:8080"
     environment:
       - KAFKA_CLUSTERS_0_NAME=local
-      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+      # ✅ FIXED: use INTERNAL listener (container-to-container)
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=trading_kafka:29092
     depends_on:
       - kafka
     networks:

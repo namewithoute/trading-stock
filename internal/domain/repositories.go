@@ -23,12 +23,10 @@ type Repositories struct {
 	// ── User Context ──────────────────────────────────────────────────
 	User user.Repository
 
-	// ── Account Context – Data Repositories ──────────────────────────
-	// NOTE: Account command/query is implemented via Event Sourcing.
-	// The legacy CRUD repository is kept for backward compatibility
-	// with Order UseCase that does a balance pre-check.
-	Account              account.Repository
-	AccountEventStore    account.EventStore
+	// ── Account Context ────────────────────────────────────────────────
+	// Write side: account.Repository is injected directly in wire.go
+	// (it depends on Kafka, so it cannot be wired in NewRepositories).
+	// Query (read) side served by ReadModelRepository.
 	AccountReadModelRepo account.ReadModelRepository
 
 	// ── Order Context ─────────────────────────────────────────────────

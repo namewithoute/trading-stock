@@ -63,6 +63,9 @@ var (
 	ErrAccountAlreadyExists    = errors.New("account already exists")
 	ErrAccountNotActive        = errors.New("account is not active")
 	ErrInvalidAmount           = errors.New("invalid amount: must be greater than zero")
+	ErrInvalidUserID           = errors.New("invalid user ID")
+	ErrInvalidCurrency         = errors.New("invalid currency")
+	ErrAccountNotFrozen        = errors.New("account is not frozen")
 )
 
 type Money struct {
