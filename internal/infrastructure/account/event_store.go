@@ -270,6 +270,13 @@ func DeserialiseEvent(ed EventDescriptor) (domain.DomainEvent, error) {
 		}
 		return e, nil
 
+	case domain.EventTradeSettled:
+		var e domain.TradeSettledEvent
+		if err := json.Unmarshal(ed.Payload, &e); err != nil {
+			return nil, err
+		}
+		return e, nil
+
 	default:
 		return nil, fmt.Errorf("unknown event type: %s", ed.EventType)
 	}

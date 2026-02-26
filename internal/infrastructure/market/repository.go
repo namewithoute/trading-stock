@@ -153,6 +153,10 @@ func (r *candleRepository) Create(ctx context.Context, c *domain.Candle) error {
 	return r.db.WithContext(ctx).Create(toCandleModel(c)).Error
 }
 
+func (r *candleRepository) Update(ctx context.Context, c *domain.Candle) error {
+	return r.db.WithContext(ctx).Save(toCandleModel(c)).Error
+}
+
 func (r *candleRepository) GetBySymbolAndInterval(ctx context.Context, symbol, interval string, from, to time.Time) ([]*domain.Candle, error) {
 	var models []*CandleModel
 	err := r.db.WithContext(ctx).Where("symbol = ? AND interval = ? AND timestamp BETWEEN ? AND ?", symbol, interval, from, to).Order("timestamp ASC").Find(&models).Error

@@ -55,6 +55,9 @@ type CandleRepository interface {
 	// Create creates a new candle
 	Create(ctx context.Context, candle *Candle) error
 
+	// Update updates an existing candle (used to update OHLCV fields).
+	Update(ctx context.Context, candle *Candle) error
+
 	// GetBySymbolAndInterval retrieves candles for a symbol and interval
 	GetBySymbolAndInterval(ctx context.Context, symbol, interval string, from, to time.Time) ([]*Candle, error)
 

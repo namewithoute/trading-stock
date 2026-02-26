@@ -4,6 +4,8 @@ import (
 	"time"
 
 	domain "trading-stock/internal/domain/execution"
+
+	"gorm.io/gorm"
 )
 
 // TradeModel is the GORM persistence model for executed trades.
@@ -178,4 +180,17 @@ func (m *ClearingInstructionModel) toDomain() *domain.ClearingInstruction {
 		FailureReason:   m.FailureReason,
 		CreatedAt:       m.CreatedAt,
 	}
+}
+
+// ─── Transaction helpers (used by cross-package consumers) ───────────────────
+
+// SaveTradeWithTx persists a domain.Trade inside an already-open GORM transaction.
+// Called by the Matching Service to atomically persist a trade alongside its outbox row.
+func SaveTradeWithTx(tx *gorm.DB, t *domain.Trade) error {
+	return tx.Create(toTradeModel(t)).Error
+}
+
+// UpdateTradeStatusWithTx updates trade status inside an already-open GORM transaction.
+func UpdateTradeStatusWithTx(tx *gorm.DB, tradeID string, status domain.TradeStatus) error {
+	return tx.Model(&TradeModel{}).Where("id = ?", tradeID).Update("status", string(status)).Error
 }

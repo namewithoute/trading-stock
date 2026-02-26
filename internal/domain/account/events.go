@@ -16,6 +16,7 @@ const (
 	EventFundsReserved  EventType = "account.funds_reserved"
 	EventFundsReleased  EventType = "account.funds_released"
 	EventStatusChanged  EventType = "account.status_changed"
+	EventTradeSettled   EventType = "account.trade_settled"
 )
 
 // DomainEvent is the contract every event in this aggregate must satisfy.
@@ -99,3 +100,18 @@ type StatusChangedEvent struct {
 func (e StatusChangedEvent) GetEventType() EventType  { return EventStatusChanged }
 func (e StatusChangedEvent) GetAggregateID() string   { return e.AggregateID }
 func (e StatusChangedEvent) GetOccurredAt() time.Time { return e.OccurredAt }
+
+// TradeSettledEvent is emitted when a trade is settled against this account.
+// For BUY side: Balance decreases by the settlement amount (funds transferred).
+// For SELL side: Balance and BuyingPower increase by the settlement amount (cash received).
+type TradeSettledEvent struct {
+	AggregateID string    `json:"aggregate_id"`
+	TradeID     string    `json:"trade_id"`
+	Side        string    `json:"side"`   // "BUY" or "SELL"
+	Amount      float64   `json:"amount"` // settlement amount = price * quantity
+	OccurredAt  time.Time `json:"occurred_at"`
+}
+
+func (e TradeSettledEvent) GetEventType() EventType  { return EventTradeSettled }
+func (e TradeSettledEvent) GetAggregateID() string   { return e.AggregateID }
+func (e TradeSettledEvent) GetOccurredAt() time.Time { return e.OccurredAt }

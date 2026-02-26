@@ -1,304 +1,391 @@
-﻿package market
+package market
 
 import (
 	"net/http"
+	"time"
+
 	marketUC "trading-stock/internal/application/market"
+	"trading-stock/pkg/response"
 
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
 )
 
-// MarketHandler handles market data endpoints
+// MarketHandler handles market data endpoints.
 type MarketHandler struct {
 	marketUseCase marketUC.UseCase
 	logger        *zap.Logger
 }
 
-// NewMarketHandler creates a new market handler
 func NewMarketHandler(marketUseCase marketUC.UseCase, logger *zap.Logger) *MarketHandler {
-	return &MarketHandler{
-		marketUseCase: marketUseCase,
-		logger:        logger,
-	}
+	return &MarketHandler{marketUseCase: marketUseCase, logger: logger}
 }
 
-// GetTrendingStocks gets trending stocks (public)
-// GET /api/v1/market/trending
+// GetTrendingStocks GET /api/v1/market/trending
 func (h *MarketHandler) GetTrendingStocks(c echo.Context) error {
-	// TODO: Implement get trending stocks logic
-	// 1. Calculate trending based on volume, price change, mentions
-	// 2. Fetch top N trending stocks
-	// 3. Return trending list
+	limitStr := c.QueryParam("limit")
+	limit := 10
+	if limitStr != "" {
+		if n, err := parseInt(limitStr); err == nil && n > 0 {
+			limit = n
+		}
+	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message": "Get trending stocks - TODO: implement",
-		"data": []map[string]interface{}{
-			{
-				"symbol":         "VNM",
-				"name":           "Vinamilk",
-				"current_price":  87000,
-				"change_percent": 5.2,
-				"volume":         5000000,
-				"trending_score": 95,
-			},
-			{
-				"symbol":         "HPG",
-				"name":           "Hoa Phat Group",
-				"current_price":  56500,
-				"change_percent": 3.8,
-				"volume":         8000000,
-				"trending_score": 88,
-			},
-			{
-				"symbol":         "VCB",
-				"name":           "Vietcombank",
-				"current_price":  92000,
-				"change_percent": 2.5,
-				"volume":         3500000,
-				"trending_score": 82,
-			},
-		},
-	})
+	results, err := h.marketUseCase.GetTrendingStocks(c.Request().Context(), limit)
+	if err != nil {
+		h.logger.Error("GetTrendingStocks failed", zap.Error(err))
+		return response.Error(c, http.StatusInternalServerError, "Failed to get trending stocks", err.Error())
+	}
+
+	dtos := make([]TrendingStockDTO, 0, len(results))
+	for _, r := range results {
+		dto := TrendingStockDTO{
+			Symbol:   r.Stock.Symbol,
+			Name:     r.Stock.Name,
+			Exchange: r.Stock.Exchange,
+		}
+		if r.LatestPrice != nil {
+			dto.Price = r.LatestPrice.Price
+			dto.Bid = r.LatestPrice.Bid
+			dto.Ask = r.LatestPrice.Ask
+			dto.Volume = r.LatestPrice.Volume
+		}
+		dtos = append(dtos, dto)
+	}
+
+	return response.Success(c, http.StatusOK, "Trending stocks retrieved", dtos)
 }
 
-// ListStocks lists all available stocks (public)
-
-// GET /api/v1/market/stocks
+// ListStocks GET /api/v1/market/stocks
 func (h *MarketHandler) ListStocks(c echo.Context) error {
-	// TODO: Implement list stocks logic
-	// 1. Parse query params (exchange, sector, page, limit)
-	// 2. Fetch stocks from database with filters
-	// 3. Get current prices from cache/market data service
-	// 4. Return paginated list
+	var req ListStocksRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "Invalid query parameters", err.Error())
+	}
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.Limit <= 0 {
+		req.Limit = 20
+	}
+	offset := (req.Page - 1) * req.Limit
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message": "List stocks - TODO: implement",
-		"data": []map[string]interface{}{
-			{
-				"symbol":         "VNM",
-				"name":           "Vinamilk",
-				"exchange":       "HOSE",
-				"sector":         "Consumer Goods",
-				"current_price":  87000,
-				"change":         2000,
-				"change_percent": 2.35,
-				"volume":         1500000,
-			},
-			{
-				"symbol":         "HPG",
-				"name":           "Hoa Phat Group",
-				"exchange":       "HOSE",
-				"sector":         "Materials",
-				"current_price":  56500,
-				"change":         -500,
-				"change_percent": -0.88,
-				"volume":         3200000,
-			},
-		},
-		"pagination": map[string]interface{}{
-			"page":  1,
-			"limit": 20,
-			"total": 100,
+	results, err := h.marketUseCase.ListStocks(c.Request().Context(), req.Exchange, req.Sector, req.Search, req.Limit, offset)
+	if err != nil {
+		h.logger.Error("ListStocks failed", zap.Error(err))
+		return response.Error(c, http.StatusInternalServerError, "Failed to list stocks", err.Error())
+	}
+
+	dtos := make([]StockDTO, 0, len(results))
+	for _, r := range results {
+		dto := StockDTO{
+			Symbol:     r.Stock.Symbol,
+			Name:       r.Stock.Name,
+			Exchange:   r.Stock.Exchange,
+			Sector:     r.Stock.Sector,
+			Industry:   r.Stock.Industry,
+			IsActive:   r.Stock.IsActive,
+			IsTradable: r.Stock.IsTradable,
+		}
+		if r.LatestPrice != nil {
+			dto.Price = r.LatestPrice.Price
+			dto.Bid = r.LatestPrice.Bid
+			dto.Ask = r.LatestPrice.Ask
+			dto.Volume = r.LatestPrice.Volume
+			dto.PriceAt = r.LatestPrice.Timestamp
+		}
+		dtos = append(dtos, dto)
+	}
+
+	return response.Success(c, http.StatusOK, "Stocks retrieved", ListStocksResponse{
+		Stocks: dtos,
+		Pagination: Pagination{
+			Page:  req.Page,
+			Limit: req.Limit,
+			Total: len(dtos),
 		},
 	})
 }
 
-// GetStockDetail gets stock details (public)
-// GET /api/v1/market/stocks/:symbol
+// GetStockDetail GET /api/v1/market/stocks/:symbol
 func (h *MarketHandler) GetStockDetail(c echo.Context) error {
 	symbol := c.Param("symbol")
 
-	// TODO: Implement get stock detail logic
-	// 1. Get symbol from URL param
-	// 2. Fetch stock info from database
-	// 3. Get current market data
-	// 4. Get company fundamentals
-	// 5. Return detailed info
+	r, err := h.marketUseCase.GetStockDetail(c.Request().Context(), symbol)
+	if err != nil {
+		h.logger.Error("GetStockDetail failed", zap.Error(err), zap.String("symbol", symbol))
+		return response.Error(c, http.StatusNotFound, "Stock not found", err.Error())
+	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message": "Get stock detail - TODO: implement",
-		"data": map[string]interface{}{
-			"symbol":         symbol,
-			"name":           "Vinamilk",
-			"exchange":       "HOSE",
-			"sector":         "Consumer Goods",
-			"industry":       "Dairy Products",
-			"current_price":  87000,
-			"open":           85000,
-			"high":           88000,
-			"low":            84500,
-			"close":          87000,
-			"volume":         1500000,
-			"market_cap":     174000000000000,
-			"pe_ratio":       18.5,
-			"eps":            4700,
-			"dividend_yield": 3.2,
-		},
-	})
+	resp := StockDetailResponse{
+		Symbol:     r.Stock.Symbol,
+		Name:       r.Stock.Name,
+		Exchange:   r.Stock.Exchange,
+		Sector:     r.Stock.Sector,
+		Industry:   r.Stock.Industry,
+		IsActive:   r.Stock.IsActive,
+		IsTradable: r.Stock.IsTradable,
+		CreatedAt:  r.Stock.CreatedAt,
+	}
+	if r.LatestPrice != nil {
+		resp.Price = r.LatestPrice.Price
+		resp.Bid = r.LatestPrice.Bid
+		resp.Ask = r.LatestPrice.Ask
+		resp.Spread = r.LatestPrice.Ask - r.LatestPrice.Bid
+		resp.Volume = r.LatestPrice.Volume
+		resp.PriceAt = r.LatestPrice.Timestamp
+	}
+
+	return response.Success(c, http.StatusOK, "Stock detail retrieved", resp)
 }
 
-// GetCurrentPrice gets current stock price (public)
-// GET /api/v1/market/stocks/:symbol/price
+// GetCurrentPrice GET /api/v1/market/stocks/:symbol/price
 func (h *MarketHandler) GetCurrentPrice(c echo.Context) error {
 	symbol := c.Param("symbol")
 
-	// TODO: Implement get current price logic
-	// 1. Get symbol from URL param
-	// 2. Fetch real-time price from cache/market data service
-	// 3. Return price info
+	p, err := h.marketUseCase.GetLatestPrice(c.Request().Context(), symbol)
+	if err != nil {
+		h.logger.Error("GetCurrentPrice failed", zap.Error(err), zap.String("symbol", symbol))
+		return response.Error(c, http.StatusNotFound, "Price not found", err.Error())
+	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message": "Get current price - TODO: implement",
-		"data": map[string]interface{}{
-			"symbol":         symbol,
-			"price":          87000,
-			"bid":            86900,
-			"ask":            87100,
-			"change":         2000,
-			"change_percent": 2.35,
-			"timestamp":      "2024-01-01T14:30:00Z",
-		},
+	return response.Success(c, http.StatusOK, "Current price retrieved", PriceResponse{
+		Symbol:    symbol,
+		Price:     p.Price,
+		Bid:       p.Bid,
+		Ask:       p.Ask,
+		Spread:    p.Ask - p.Bid,
+		Volume:    p.Volume,
+		Timestamp: p.Timestamp,
 	})
 }
 
-// GetCandles gets candlestick data (public)
-// GET /api/v1/market/stocks/:symbol/candles
+// GetPriceHistory GET /api/v1/market/stocks/:symbol/price/history
+func (h *MarketHandler) GetPriceHistory(c echo.Context) error {
+	symbol := c.Param("symbol")
+
+	var req PriceHistoryRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "Invalid query parameters", err.Error())
+	}
+
+	now := time.Now().UTC()
+	from := now.Add(-24 * time.Hour)
+	to := now
+
+	if req.From != "" {
+		if t, err := time.Parse(time.RFC3339, req.From); err == nil {
+			from = t
+		}
+	}
+	if req.To != "" {
+		if t, err := time.Parse(time.RFC3339, req.To); err == nil {
+			to = t
+		}
+	}
+
+	prices, err := h.marketUseCase.GetPriceHistory(c.Request().Context(), symbol, from, to)
+	if err != nil {
+		h.logger.Error("GetPriceHistory failed", zap.Error(err), zap.String("symbol", symbol))
+		return response.Error(c, http.StatusInternalServerError, "Failed to get price history", err.Error())
+	}
+
+	dtos := make([]PriceResponse, 0, len(prices))
+	for _, p := range prices {
+		dtos = append(dtos, PriceResponse{
+			Symbol:    symbol,
+			Price:     p.Price,
+			Bid:       p.Bid,
+			Ask:       p.Ask,
+			Spread:    p.Ask - p.Bid,
+			Volume:    p.Volume,
+			Timestamp: p.Timestamp,
+		})
+	}
+
+	return response.Success(c, http.StatusOK, "Price history retrieved", map[string]interface{}{
+		"symbol": symbol,
+		"from":   from,
+		"to":     to,
+		"count":  len(dtos),
+		"prices": dtos,
+	})
+}
+
+// GetCandles GET /api/v1/market/stocks/:symbol/candles
 func (h *MarketHandler) GetCandles(c echo.Context) error {
 	symbol := c.Param("symbol")
 
-	// TODO: Implement get candles logic
-	// 1. Get symbol from URL param
-	// 2. Parse query params (interval: 1m, 5m, 15m, 1h, 1d, from, to)
-	// 3. Fetch OHLCV data from database/time-series DB
-	// 4. Return candle data
+	var req GetCandlesRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "Invalid query parameters", err.Error())
+	}
+	if req.Interval == "" {
+		req.Interval = "1d"
+	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message":  "Get candles - TODO: implement",
-		"symbol":   symbol,
-		"interval": "1d",
-		"data": []map[string]interface{}{
-			{
-				"timestamp": "2024-01-01T00:00:00Z",
-				"open":      85000,
-				"high":      88000,
-				"low":       84500,
-				"close":     87000,
-				"volume":    1500000,
-			},
-			{
-				"timestamp": "2024-01-02T00:00:00Z",
-				"open":      87000,
-				"high":      89000,
-				"low":       86500,
-				"close":     88500,
-				"volume":    1800000,
-			},
-		},
+	now := time.Now().UTC()
+	from := now.AddDate(0, -1, 0) // default: last 30 days
+	to := now
+
+	if req.From != "" {
+		if t, err := time.Parse(time.RFC3339, req.From); err == nil {
+			from = t
+		}
+	}
+	if req.To != "" {
+		if t, err := time.Parse(time.RFC3339, req.To); err == nil {
+			to = t
+		}
+	}
+
+	candles, err := h.marketUseCase.GetCandles(c.Request().Context(), symbol, req.Interval, from, to)
+	if err != nil {
+		h.logger.Error("GetCandles failed", zap.Error(err), zap.String("symbol", symbol))
+		return response.Error(c, http.StatusInternalServerError, "Failed to get candles", err.Error())
+	}
+
+	dtos := make([]CandleDTO, 0, len(candles))
+	for _, k := range candles {
+		dtos = append(dtos, CandleDTO{
+			Timestamp: k.Timestamp,
+			Open:      k.Open,
+			High:      k.High,
+			Low:       k.Low,
+			Close:     k.Close,
+			Volume:    k.Volume,
+		})
+	}
+
+	return response.Success(c, http.StatusOK, "Candles retrieved", GetCandlesResponse{
+		Symbol:   symbol,
+		Interval: req.Interval,
+		From:     from,
+		To:       to,
+		Count:    len(dtos),
+		Candles:  dtos,
 	})
 }
 
-// GetOrderBook gets order book (public)
-// GET /api/v1/market/stocks/:symbol/orderbook
+// GetOrderBook GET /api/v1/market/stocks/:symbol/orderbook
+// Returns live order-book depth sourced from the matching engine.
+// NOTE: The engine exposes its order book via the in-process EngineService; a
+// future iteration will inject that service here. For now we return an empty
+// book so the endpoint contract is stable.
 func (h *MarketHandler) GetOrderBook(c echo.Context) error {
 	symbol := c.Param("symbol")
-
-	// TODO: Implement get order book logic
-	// 1. Get symbol from URL param
-	// 2. Fetch order book from matching engine/cache
-	// 3. Return bid/ask levels
-
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message": "Get order book - TODO: implement",
-		"symbol":  symbol,
-		"data": map[string]interface{}{
-			"bids": []map[string]interface{}{
-				{"price": 86900, "quantity": 5000},
-				{"price": 86800, "quantity": 8000},
-				{"price": 86700, "quantity": 12000},
-			},
-			"asks": []map[string]interface{}{
-				{"price": 87100, "quantity": 6000},
-				{"price": 87200, "quantity": 9000},
-				{"price": 87300, "quantity": 15000},
-			},
-			"timestamp": "2024-01-01T14:30:00Z",
-		},
+	return response.Success(c, http.StatusOK, "Order book retrieved", map[string]interface{}{
+		"symbol":    symbol,
+		"bids":      []interface{}{},
+		"asks":      []interface{}{},
+		"timestamp": time.Now().UTC(),
+		"note":      "Live order book will be available once the engine service is wired to this handler",
 	})
 }
 
-// GetPremiumAnalysis gets premium market analysis (protected)
-// GET /api/v1/market/premium/analysis/:symbol
+// GetPremiumAnalysis GET /api/v1/market/premium/analysis/:symbol  (protected)
+// Computes basic technical indicators from the last 30 days of daily candles.
 func (h *MarketHandler) GetPremiumAnalysis(c echo.Context) error {
 	symbol := c.Param("symbol")
-	userID := c.Get("user_id")
+	userID := c.Get("user_id").(string)
 
-	// TODO: Implement premium analysis logic
-	// 1. Get symbol and user ID
-	// 2. Check if user has premium subscription
-	// 3. Generate/fetch technical analysis
-	// 4. Return analysis data
+	ctx := c.Request().Context()
+	now := time.Now().UTC()
+	from := now.AddDate(0, -1, 0)
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message": "Premium analysis - TODO: implement",
-		"user_id": userID,
-		"symbol":  symbol,
-		"data": map[string]interface{}{
-			"recommendation": "buy",
-			"target_price":   95000,
-			"stop_loss":      82000,
-			"technical_indicators": map[string]interface{}{
-				"rsi":                65.5,
-				"macd":               "bullish",
-				"moving_average_50":  84000,
-				"moving_average_200": 80000,
-			},
-		},
+	candles, err := h.marketUseCase.GetCandles(ctx, symbol, "1d", from, now)
+	if err != nil || len(candles) == 0 {
+		return response.Success(c, http.StatusOK, "Analysis unavailable (insufficient data)", map[string]interface{}{
+			"symbol":  symbol,
+			"user_id": userID,
+		})
+	}
+
+	// Simple Moving Average (SMA-14)
+	n := len(candles)
+	smaWindow := 14
+	if n < smaWindow {
+		smaWindow = n
+	}
+	sum := 0.0
+	for i := n - smaWindow; i < n; i++ {
+		sum += candles[i].Close
+	}
+	sma14 := sum / float64(smaWindow)
+
+	// Last close & simple momentum
+	last := candles[n-1]
+	var momentum float64
+	if n >= 2 {
+		momentum = (last.Close - candles[n-2].Close) / candles[n-2].Close * 100
+	}
+
+	// Naive recommendation
+	recommendation := "hold"
+	if last.Close > sma14*1.02 {
+		recommendation = "buy"
+	} else if last.Close < sma14*0.98 {
+		recommendation = "sell"
+	}
+
+	return response.Success(c, http.StatusOK, "Premium analysis retrieved", map[string]interface{}{
+		"symbol":         symbol,
+		"user_id":        userID,
+		"recommendation": recommendation,
+		"last_close":     last.Close,
+		"sma_14":         sma14,
+		"momentum_pct":   momentum,
+		"candles_used":   n,
+		"as_of":          last.Timestamp,
 	})
 }
 
-// GetWatchlist gets user's watchlist (protected)
-// GET /api/v1/market/watchlist
+// GetWatchlist GET /api/v1/market/watchlist  (protected)
+// Watchlist persistence is not yet implemented (requires a watchlist table).
 func (h *MarketHandler) GetWatchlist(c echo.Context) error {
-	userID := c.Get("user_id")
-
-	// TODO: Implement get watchlist logic
-	// 1. Get user ID from context
-	// 2. Fetch watchlist from database
-	// 3. Get current prices for all symbols
-	// 4. Return watchlist
-
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message": "Get watchlist - TODO: implement",
+	userID := c.Get("user_id").(string)
+	return response.Success(c, http.StatusOK, "Watchlist retrieved", map[string]interface{}{
 		"user_id": userID,
-		"data": []map[string]interface{}{
-			{
-				"symbol":         "VNM",
-				"current_price":  87000,
-				"change_percent": 2.35,
-			},
-			{
-				"symbol":         "HPG",
-				"current_price":  56500,
-				"change_percent": -0.88,
-			},
-		},
+		"stocks":  []interface{}{},
+		"note":    "Watchlist persistence is not yet implemented",
 	})
 }
 
-// AddToWatchlist adds symbol to watchlist (protected)
-// POST /api/v1/market/watchlist
+// AddToWatchlist POST /api/v1/market/watchlist  (protected)
 func (h *MarketHandler) AddToWatchlist(c echo.Context) error {
-	userID := c.Get("user_id")
+	userID := c.Get("user_id").(string)
 
-	// TODO: Implement add to watchlist logic
-	// 1. Get user ID from context
-	// 2. Parse request body (symbol)
-	// 3. Validate symbol exists
-	// 4. Add to watchlist in database
-	// 5. Return success
+	var req AddWatchlistRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "Invalid request body", err.Error())
+	}
+	if req.Symbol == "" {
+		return response.Error(c, http.StatusBadRequest, "symbol is required", "symbol is required")
+	}
 
-	return c.JSON(http.StatusCreated, map[string]interface{}{
-		"message": "Added to watchlist successfully",
+	// Validate the symbol exists
+	if _, err := h.marketUseCase.GetStockDetail(c.Request().Context(), req.Symbol); err != nil {
+		return response.Error(c, http.StatusNotFound, "Symbol not found", err.Error())
+	}
+
+	h.logger.Info("Watchlist add requested (persistence not yet implemented)",
+		zap.String("userID", userID),
+		zap.String("symbol", req.Symbol),
+	)
+	return response.Success(c, http.StatusCreated, "Symbol added to watchlist (persistence coming soon)", map[string]string{
 		"user_id": userID,
+		"symbol":  req.Symbol,
 	})
+}
+
+// parseInt parses a string as a base-10 integer.
+func parseInt(s string) (int, error) {
+	n := 0
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return 0, echo.ErrBadRequest
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n, nil
 }

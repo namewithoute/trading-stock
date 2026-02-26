@@ -10,6 +10,7 @@ import (
 	infraExecution "trading-stock/internal/infrastructure/execution"
 	infraMarket "trading-stock/internal/infrastructure/market"
 	infraOrder "trading-stock/internal/infrastructure/order"
+	infraOutbox "trading-stock/internal/infrastructure/outbox"
 	infraPortfolio "trading-stock/internal/infrastructure/portfolio"
 	infraRisk "trading-stock/internal/infrastructure/risk"
 	infraUser "trading-stock/internal/infrastructure/user"
@@ -101,6 +102,9 @@ func AutoMigrateModels(db *gorm.DB, log *zap.Logger) error {
 		// Order – Event Sourcing tables
 		&infraOrder.OrderEventModel{},  // append-only write store
 		&infraOrder.OrderReadModelDB{}, // denormalised read projection
+
+		// Outbox – transactional outbox for reliable Kafka publishing
+		&infraOutbox.OutboxEventModel{},
 
 		// Portfolio
 		&infraPortfolio.PositionModel{},

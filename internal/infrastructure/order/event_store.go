@@ -133,6 +133,43 @@ func (s *eventStore) AppendEvents(ctx context.Context, aggregateID string, expec
 	})
 }
 
+// AppendEventsWithHook runs the same optimistic-concurrency insert as
+// AppendEvents but also calls afterFn(tx) inside the same DB transaction.
+// This allows callers (e.g., EventSourcingService) to insert outbox rows
+// atomically alongside domain events.
+func (s *eventStore) AppendEventsWithHook(ctx context.Context, aggregateID string, expectedVersion int, events []EventDescriptor, afterFn func(tx *gorm.DB) error) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var currentVersion int
+		tx.Model(&OrderEventModel{}).
+			Where("aggregate_id = ?", aggregateID).
+			Select("COALESCE(MAX(version), 0)").
+			Scan(&currentVersion)
+
+		if currentVersion != expectedVersion {
+			return fmt.Errorf("optimistic concurrency conflict: expected version %d but current is %d", expectedVersion, currentVersion)
+		}
+
+		for _, ed := range events {
+			row := &OrderEventModel{
+				ID:          uuid.New().String(),
+				AggregateID: ed.AggregateID,
+				EventType:   string(ed.EventType),
+				Payload:     ed.Payload,
+				Version:     ed.Version,
+				OccurredAt:  ed.OccurredAt,
+			}
+			if err := tx.Create(row).Error; err != nil {
+				return fmt.Errorf("failed to append event %s: %w", ed.EventType, err)
+			}
+		}
+
+		if afterFn != nil {
+			return afterFn(tx)
+		}
+		return nil
+	})
+}
+
 // LoadEvents fetches all events for an aggregate ordered by version ASC.
 func (s *eventStore) LoadEvents(ctx context.Context, aggregateID string) ([]EventDescriptor, error) {
 	var rows []OrderEventModel

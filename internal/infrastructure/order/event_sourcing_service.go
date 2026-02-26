@@ -7,14 +7,34 @@ import (
 	"time"
 
 	domain "trading-stock/internal/domain/order"
+	"trading-stock/internal/infrastructure/outbox"
 
 	"github.com/google/uuid"
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 // KafkaTopicOrderEvents is the Kafka topic for order domain events.
 const KafkaTopicOrderEvents = "order.events"
+
+// KafkaTopicOrdersAccepted is the outbox topic consumed by the Matching Engine.
+const KafkaTopicOrdersAccepted = "orders.accepted"
+
+// OrderAcceptedMessage is the payload written to the outbox for accepted orders.
+// The Matching Engine Consumer deserialises this to drive MatchingEngine.SubmitOrder.
+type OrderAcceptedMessage struct {
+	EventID    string           `json:"event_id"`
+	OrderID    string           `json:"order_id"`
+	UserID     string           `json:"user_id"`
+	AccountID  string           `json:"account_id"`
+	Symbol     string           `json:"symbol"`
+	Side       domain.Side      `json:"side"`
+	OrderType  domain.OrderType `json:"order_type"`
+	Price      float64          `json:"price"`
+	Quantity   int              `json:"quantity"`
+	OccurredAt time.Time        `json:"occurred_at"`
+}
 
 // EventSourcingService implements domain.Repository.
 //
@@ -96,9 +116,13 @@ func (s *EventSourcingService) Save(ctx context.Context, agg *domain.OrderAggreg
 		})
 	}
 
-	// ── Step 2: Persist to EventStore (Postgres) ──────────────────────
-	if err := s.eventStore.AppendEvents(ctx, agg.ID, baseVersion, descriptors); err != nil {
-		return fmt.Errorf("order eventStore.AppendEvents: %w", err)
+	// ── Step 2: Persist to EventStore (Postgres) + outbox in same TX ─────
+	if err := s.eventStore.AppendEventsWithHook(ctx, agg.ID, baseVersion, descriptors,
+		func(tx *gorm.DB) error {
+			return s.insertOutboxEntries(tx, changes, descriptors)
+		},
+	); err != nil {
+		return fmt.Errorf("order eventStore.AppendEventsWithHook: %w", err)
 	}
 	agg.ClearUncommittedEvents()
 
@@ -145,6 +169,46 @@ func (s *EventSourcingService) publishToKafka(ctx context.Context, descs []Event
 	defer cancel()
 
 	return s.publisher.WriteMessages(writeCtx, msgs...)
+}
+
+// ─── insertOutboxEntries ──────────────────────────────────────────────────────
+
+// insertOutboxEntries writes outbox rows for events that need downstream fanout.
+// Currently only order.placed generates an orders.accepted outbox entry.
+// Called inside the DB transaction from AppendEventsWithHook.
+func (s *EventSourcingService) insertOutboxEntries(tx *gorm.DB, events []domain.DomainEvent, descriptors []EventDescriptor) error {
+	for i, ev := range events {
+		if ev.GetEventType() != domain.EventOrderPlaced {
+			continue
+		}
+		placed, ok := ev.(domain.OrderPlacedEvent)
+		if !ok {
+			continue
+		}
+
+		msg := OrderAcceptedMessage{
+			EventID:    descriptors[i].ID,
+			OrderID:    placed.AggregateID,
+			UserID:     placed.UserID,
+			AccountID:  placed.AccountID,
+			Symbol:     placed.Symbol,
+			Side:       placed.Side,
+			OrderType:  placed.OrderType,
+			Price:      placed.Price,
+			Quantity:   placed.Quantity,
+			OccurredAt: placed.OccurredAt,
+		}
+
+		payload, err := json.Marshal(msg)
+		if err != nil {
+			return fmt.Errorf("marshal OrderAcceptedMessage: %w", err)
+		}
+
+		if err := outbox.InsertOutboxEvent(tx, uuid.New().String(), KafkaTopicOrdersAccepted, placed.AggregateID, payload); err != nil {
+			return fmt.Errorf("insert outbox order.placed: %w", err)
+		}
+	}
+	return nil
 }
 
 // ─── DeserialiseEvent ─────────────────────────────────────────────────────────

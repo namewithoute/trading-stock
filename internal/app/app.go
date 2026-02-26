@@ -8,7 +8,10 @@ import (
 	"trading-stock/internal/config"
 	"trading-stock/internal/domain"
 	infraAccount "trading-stock/internal/infrastructure/account"
+	infraMarket "trading-stock/internal/infrastructure/market"
+	infraMatching "trading-stock/internal/infrastructure/matching"
 	infraOrder "trading-stock/internal/infrastructure/order"
+	infraOutbox "trading-stock/internal/infrastructure/outbox"
 	"trading-stock/internal/presentation/handler"
 	"trading-stock/pkg/jwtservice"
 	"trading-stock/pkg/logger"
@@ -24,7 +27,7 @@ import (
 // It owns all initialized dependencies and their lifecycle.
 //
 // Startup sequence:  New() → [config → logger → resources → wire → server]
-// Shutdown sequence: Shutdown() → [http → projector → db → redis → kafka → logger.sync]
+// Shutdown sequence: Shutdown() → [http → workers → db → redis → kafka → logger.sync]
 type App struct {
 	Config *config.Config
 	Logger *zap.Logger
@@ -43,10 +46,28 @@ type App struct {
 	Handlers     *handler.HandlerGroup
 	JWTService   jwtservice.Service
 
-	// Background workers
-	AccountProjector *infraAccount.Projector // consumes account.events → upserts read model
-	OrderProjector   *infraOrder.Projector   // consumes order.events  → upserts read model
-	projectorCancel  context.CancelFunc      // cancel fn to stop the projector goroutine
+	// ── Background workers ─────────────────────────────────────────────────
+	// Projectors: consume domain event topics → maintain read models
+	AccountProjector *infraAccount.Projector
+	OrderProjector   *infraOrder.Projector
+
+	// Outbox relay: polls outbox_events → publishes to Kafka
+	OutboxRelay *infraOutbox.OutboxRelay
+
+	// Matching: consumes orders.accepted → runs engine → writes trades + outbox
+	MatchingConsumer *infraMatching.MatchingConsumer
+
+	// Fill consumer: consumes trades.executed → updates order aggregate state
+	OrderFillConsumer *infraOrder.OrderFillConsumer
+
+	// Account settlement: consumes trades.executed → settles funds
+	AccountTradeConsumer *infraAccount.TradeConsumer
+
+	// Market data: consumes trades.executed → updates price + candle tables
+	MarketTradeConsumer *infraMarket.MarketTradeConsumer
+
+	// Single cancel for all background goroutines
+	workerCancel context.CancelFunc
 }
 
 // New bootstraps the application in a strict, ordered sequence.

@@ -117,6 +117,36 @@ func (a *AccountAggregate) ReleaseFunds(amount float64) error {
 	return nil
 }
 
+// SettleTrade finalises cash movement for a filled order execution.
+//
+// BUY settlement: debits Balance by the settlement amount (payment for securities).
+// The BuyingPower was already reduced when funds were reserved at order placement,
+// so only the Balance changes here.
+//
+// SELL settlement: credits both Balance and BuyingPower (cash received from the sale).
+//
+// Emits TradeSettledEvent.
+func (a *AccountAggregate) SettleTrade(tradeID, side string, amount float64) error {
+	if a.Status != StatusActive {
+		return ErrAccountNotActive
+	}
+	if amount <= 0 {
+		return ErrInvalidAmount
+	}
+	if side != "BUY" && side != "SELL" {
+		return ErrInvalidAmount // reuse; a dedicated error would be cleaner
+	}
+
+	a.apply(TradeSettledEvent{
+		AggregateID: a.ID,
+		TradeID:     tradeID,
+		Side:        side,
+		Amount:      amount,
+		OccurredAt:  nowUTC(),
+	}, true)
+	return nil
+}
+
 // ─── Status transitions ───────────────────────────────────────────────────────
 
 // Freeze suspends the account (no trading, read-only). Active → Frozen.

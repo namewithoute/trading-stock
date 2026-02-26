@@ -16,25 +16,19 @@ import (
 // the process receives an OS signal or the server errors.
 func (a *App) Run() error {
 	// ── 1. Start background workers ───────────────────────────────────
-	// Create ONE cancellable context shared by ALL projectors.
-	// Shutdown() calls projectorCancel() to stop them all at once.
-	projCtx, cancel := context.WithCancel(context.Background())
-	a.projectorCancel = cancel
+	// ONE shared context cancels ALL background goroutines on shutdown.
+	workerCtx, cancel := context.WithCancel(context.Background())
+	a.workerCancel = cancel
 
 	// ── Account Projector ─────────────────────────────────────────────
 	if a.AccountProjector != nil {
-		// Phase 1: Catch-up rebuild (SYNCHRONOUS — guarantees read model is
-		// consistent before HTTP traffic starts and before Kafka consumer begins).
 		a.Logger.Info("[ Projector ] Account: starting catch-up rebuild...")
-		if err := a.AccountProjector.Rebuild(projCtx); err != nil {
-			a.Logger.Error("[ Projector ] Account Rebuild failed — read models may be stale",
-				zap.Error(err),
-			)
+		if err := a.AccountProjector.Rebuild(workerCtx); err != nil {
+			a.Logger.Error("[ Projector ] Account Rebuild failed — read models may be stale", zap.Error(err))
 		}
-		// Phase 2: Live Kafka streaming (async).
 		go func() {
 			a.Logger.Info("[ Projector ] Account Projector starting live stream...")
-			a.AccountProjector.Run(projCtx)
+			a.AccountProjector.Run(workerCtx)
 			a.Logger.Info("[ Projector ] Account Projector stopped")
 		}()
 	}
@@ -42,17 +36,51 @@ func (a *App) Run() error {
 	// ── Order Projector ───────────────────────────────────────────────
 	if a.OrderProjector != nil {
 		a.Logger.Info("[ Projector ] Order: starting catch-up rebuild...")
-		if err := a.OrderProjector.Rebuild(projCtx); err != nil {
-			a.Logger.Error("[ Projector ] Order Rebuild failed — read models may be stale",
-				zap.Error(err),
-			)
+		if err := a.OrderProjector.Rebuild(workerCtx); err != nil {
+			a.Logger.Error("[ Projector ] Order Rebuild failed — read models may be stale", zap.Error(err))
 		}
 		go func() {
 			a.Logger.Info("[ Projector ] Order Projector starting live stream...")
-			a.OrderProjector.Run(projCtx)
+			a.OrderProjector.Run(workerCtx)
 			a.Logger.Info("[ Projector ] Order Projector stopped")
 		}()
 	}
+
+	// ── Outbox Relay ──────────────────────────────────────────────────
+	if a.OutboxRelay != nil {
+		go func() {
+			a.OutboxRelay.Run(workerCtx)
+		}()
+	}
+
+	// ── Matching Consumer ─────────────────────────────────────────────
+	if a.MatchingConsumer != nil {
+		go func() {
+			a.MatchingConsumer.Run(workerCtx)
+		}()
+	}
+
+	// ── Order Fill Consumer ───────────────────────────────────────────
+	if a.OrderFillConsumer != nil {
+		go func() {
+			a.OrderFillConsumer.Run(workerCtx)
+		}()
+	}
+
+	// ── Account Trade Consumer ────────────────────────────────────────
+	if a.AccountTradeConsumer != nil {
+		go func() {
+			a.AccountTradeConsumer.Run(workerCtx)
+		}()
+	}
+
+	// ── Market Trade Consumer ─────────────────────────────────────────
+	if a.MarketTradeConsumer != nil {
+		go func() {
+			a.MarketTradeConsumer.Run(workerCtx)
+		}()
+	}
+
 	// ── 2. Start HTTP server ───────────────────────────────────────────
 	errChan := make(chan error, 1)
 	go func() {
@@ -94,10 +122,9 @@ func (a *App) Shutdown() error {
 	}
 
 	// ── 2. Background workers ─────────────────────────────────────────
-	// Cancel the projectors' context so their FetchMessage loops exit.
-	if a.projectorCancel != nil {
-		a.Logger.Info("Stopping Projectors (Account + Order)...")
-		a.projectorCancel()
+	if a.workerCancel != nil {
+		a.Logger.Info("Stopping all background workers...")
+		a.workerCancel()
 	}
 
 	// ── 3. Infrastructure connections ─────────────────────────────────

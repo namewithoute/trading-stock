@@ -21,11 +21,12 @@ func (r *MarketRouter) RegisterPublicRoutes(g *echo.Group) {
 
 	stocks := market.Group("/stocks")
 
-	stocks.GET("", r.handler.ListStocks)                     // GET /api/v1/market/stocks
-	stocks.GET("/:symbol", r.handler.GetStockDetail)         // GET /api/v1/market/stocks/:symbol
-	stocks.GET("/:symbol/price", r.handler.GetCurrentPrice)  // GET /api/v1/market/stocks/:symbol/price
-	stocks.GET("/:symbol/candles", r.handler.GetCandles)     // GET /api/v1/market/stocks/:symbol/candles
-	stocks.GET("/:symbol/orderbook", r.handler.GetOrderBook) // GET /api/v1/market/stocks/:symbol/orderbook
+	stocks.GET("", r.handler.ListStocks)                            // GET /api/v1/market/stocks
+	stocks.GET("/:symbol", r.handler.GetStockDetail)                // GET /api/v1/market/stocks/:symbol
+	stocks.GET("/:symbol/price", r.handler.GetCurrentPrice)         // GET /api/v1/market/stocks/:symbol/price
+	stocks.GET("/:symbol/price/history", r.handler.GetPriceHistory) // GET /api/v1/market/stocks/:symbol/price/history
+	stocks.GET("/:symbol/candles", r.handler.GetCandles)            // GET /api/v1/market/stocks/:symbol/candles
+	stocks.GET("/:symbol/orderbook", r.handler.GetOrderBook)        // GET /api/v1/market/stocks/:symbol/orderbook
 
 }
 

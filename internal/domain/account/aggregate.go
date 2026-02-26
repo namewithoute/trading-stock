@@ -79,6 +79,16 @@ func (a *AccountAggregate) apply(event DomainEvent, isNew bool) {
 
 	case StatusChangedEvent:
 		a.Status = e.NewStatus
+
+	case TradeSettledEvent:
+		if e.Side == "BUY" {
+			// Funds were already reserved (BuyingPower reduced); now debit the actual balance.
+			a.Money.Balance -= e.Amount
+		} else {
+			// SELL settlement: cash received from selling securities.
+			a.Money.Balance += e.Amount
+			a.Money.BuyingPower += e.Amount
+		}
 	}
 
 	a.Version++
