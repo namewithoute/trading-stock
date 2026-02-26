@@ -11,8 +11,8 @@ import (
 	"trading-stock/internal/infrastructure/engine"
 	infraEvents "trading-stock/internal/infrastructure/events"
 	infraExecution "trading-stock/internal/infrastructure/execution"
-	infraOutbox "trading-stock/internal/infrastructure/outbox"
 	infraOrder "trading-stock/internal/infrastructure/order"
+	infraOutbox "trading-stock/internal/infrastructure/outbox"
 
 	"github.com/google/uuid"
 	"github.com/segmentio/kafka-go"
@@ -25,9 +25,9 @@ const KafkaTopicTradesExecuted = "trades.executed"
 
 // MatchingService bridges Kafka consumer → MatchingEngine → persistence + outbox.
 type MatchingService struct {
-	engine    *engine.MatchingEngine
-	db        *gorm.DB
-	logger    *zap.Logger
+	engine *engine.MatchingEngine
+	db     *gorm.DB
+	logger *zap.Logger
 }
 
 // NewMatchingService constructs the service.
