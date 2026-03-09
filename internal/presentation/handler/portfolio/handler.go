@@ -3,6 +3,7 @@
 import (
 	"net/http"
 	portfolioUC "trading-stock/internal/application/portfolio"
+	"trading-stock/pkg/response"
 
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
@@ -25,155 +26,121 @@ func NewPortfolioHandler(portfolioUseCase portfolioUC.UseCase, logger *zap.Logge
 // GetOverview gets portfolio overview (protected)
 // GET /api/v1/portfolio
 func (h *PortfolioHandler) GetOverview(c echo.Context) error {
-	userID := c.Get("user_id")
+	userID, ok := c.Get("user_id").(string)
+	if !ok || userID == "" {
+		return response.Error(c, http.StatusUnauthorized, "User not authenticated", "unauthorized")
+	}
 
-	// TODO: Implement get portfolio overview logic
-	// 1. Get user ID from context
-	// 2. Calculate total portfolio value
-	// 3. Calculate P&L (profit/loss)
-	// 4. Get asset allocation
-	// 5. Return overview
+	positions, err := h.portfolioUseCase.GetOverview(c.Request().Context(), userID)
+	if err != nil {
+		h.logger.Error("GetOverview failed", zap.Error(err), zap.String("user_id", userID))
+		return response.Error(c, http.StatusInternalServerError, "Failed to get portfolio overview", err.Error())
+	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message": "Portfolio overview - TODO: implement",
-		"user_id": userID,
-		"data": map[string]interface{}{
-			"total_value":         150000000,
-			"cash":                50000000,
-			"stock_value":         100000000,
-			"total_profit_loss":   5000000,
-			"profit_loss_percent": 3.45,
-			"day_change":          1200000,
-			"day_change_percent":  0.8,
-		},
+	totalValue, err := h.portfolioUseCase.GetTotalValue(c.Request().Context(), userID)
+	if err != nil {
+		h.logger.Warn("GetTotalValue failed", zap.Error(err))
+	}
+
+	totalPnL, err := h.portfolioUseCase.GetTotalUnrealizedPnL(c.Request().Context(), userID)
+	if err != nil {
+		h.logger.Warn("GetTotalUnrealizedPnL failed", zap.Error(err))
+	}
+
+	dtos := make([]PositionDTO, 0, len(positions))
+	for _, p := range positions {
+		dtos = append(dtos, toPositionDTO(p))
+	}
+
+	return response.Success(c, http.StatusOK, "Portfolio overview retrieved", PortfolioOverviewResponse{
+		UserID:        userID,
+		TotalValue:    totalValue,
+		TotalPnL:      totalPnL,
+		PositionCount: len(positions),
+		Positions:     dtos,
 	})
 }
 
 // ListPositions lists all positions (protected)
 // GET /api/v1/portfolio/positions
 func (h *PortfolioHandler) ListPositions(c echo.Context) error {
-	userID := c.Get("user_id")
+	userID, ok := c.Get("user_id").(string)
+	if !ok || userID == "" {
+		return response.Error(c, http.StatusUnauthorized, "User not authenticated", "unauthorized")
+	}
 
-	// TODO: Implement list positions logic
-	// 1. Get user ID from context
-	// 2. Fetch all stock positions from database
-	// 3. Get current market prices
-	// 4. Calculate P&L for each position
-	// 5. Return list of positions
+	positions, err := h.portfolioUseCase.GetOverview(c.Request().Context(), userID)
+	if err != nil {
+		h.logger.Error("ListPositions failed", zap.Error(err), zap.String("user_id", userID))
+		return response.Error(c, http.StatusInternalServerError, "Failed to list positions", err.Error())
+	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message": "List positions - TODO: implement",
-		"user_id": userID,
-		"data": []map[string]interface{}{
-			{
-				"symbol":              "VNM",
-				"quantity":            500,
-				"average_price":       85000,
-				"current_price":       87000,
-				"market_value":        43500000,
-				"profit_loss":         1000000,
-				"profit_loss_percent": 2.35,
-			},
-			{
-				"symbol":              "HPG",
-				"quantity":            1000,
-				"average_price":       55000,
-				"current_price":       56500,
-				"market_value":        56500000,
-				"profit_loss":         1500000,
-				"profit_loss_percent": 2.73,
-			},
-		},
-	})
+	dtos := make([]PositionDTO, 0, len(positions))
+	for _, p := range positions {
+		dtos = append(dtos, toPositionDTO(p))
+	}
+
+	return response.Success(c, http.StatusOK, "Positions retrieved", dtos)
 }
 
 // GetPosition gets position by symbol (protected)
 // GET /api/v1/portfolio/positions/:symbol
 func (h *PortfolioHandler) GetPosition(c echo.Context) error {
 	symbol := c.Param("symbol")
-	userID := c.Get("user_id")
+	accountID := c.QueryParam("account_id")
 
-	// TODO: Implement get position logic
-	// 1. Get symbol from URL param
-	// 2. Get user ID from context
-	// 3. Fetch position details from database
-	// 4. Get current market price
-	// 5. Calculate detailed P&L
-	// 6. Get transaction history for this symbol
-	// 7. Return detailed position info
+	userID, ok := c.Get("user_id").(string)
+	if !ok || userID == "" {
+		return response.Error(c, http.StatusUnauthorized, "User not authenticated", "unauthorized")
+	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message": "Get position - TODO: implement",
-		"user_id": userID,
-		"data": map[string]interface{}{
-			"symbol":              symbol,
-			"quantity":            500,
-			"available_quantity":  450,
-			"frozen_quantity":     50,
-			"average_price":       85000,
-			"current_price":       87000,
-			"market_value":        43500000,
-			"cost_basis":          42500000,
-			"profit_loss":         1000000,
-			"profit_loss_percent": 2.35,
-			"day_change":          500000,
-			"day_change_percent":  1.16,
-			"transactions": []map[string]interface{}{
-				{
-					"date":     "2024-01-01",
-					"type":     "buy",
-					"quantity": 300,
-					"price":    84000,
-				},
-				{
-					"date":     "2024-01-05",
-					"type":     "buy",
-					"quantity": 200,
-					"price":    86500,
-				},
-			},
-		},
-	})
+	if symbol == "" {
+		return response.Error(c, http.StatusBadRequest, "Symbol is required", "symbol_empty")
+	}
+
+	// accountID is optional; fall back to empty string for GetPositionBySymbol
+	pos, err := h.portfolioUseCase.GetPositionBySymbol(c.Request().Context(), accountID, symbol)
+	if err != nil {
+		h.logger.Error("GetPosition failed", zap.Error(err), zap.String("symbol", symbol))
+		return response.Error(c, http.StatusInternalServerError, "Failed to get position", err.Error())
+	}
+
+	if pos == nil {
+		return response.Error(c, http.StatusNotFound, "Position not found", "not_found")
+	}
+
+	return response.Success(c, http.StatusOK, "Position retrieved", toPositionDTO(pos))
 }
 
-// GetPerformance gets portfolio performance (protected)
+// GetPerformance gets portfolio performance summary (protected)
 // GET /api/v1/portfolio/performance
 func (h *PortfolioHandler) GetPerformance(c echo.Context) error {
-	userID := c.Get("user_id")
+	userID, ok := c.Get("user_id").(string)
+	if !ok || userID == "" {
+		return response.Error(c, http.StatusUnauthorized, "User not authenticated", "unauthorized")
+	}
 
-	// TODO: Implement get performance logic
-	// 1. Get user ID from context
-	// 2. Parse query params (period: 1D, 1W, 1M, 3M, 1Y, ALL)
-	// 3. Calculate portfolio value over time
-	// 4. Calculate returns
-	// 5. Calculate metrics (Sharpe ratio, max drawdown, etc.)
-	// 6. Return performance data
+	totalValue, err := h.portfolioUseCase.GetTotalValue(c.Request().Context(), userID)
+	if err != nil {
+		h.logger.Error("GetPerformance/GetTotalValue failed", zap.Error(err))
+		return response.Error(c, http.StatusInternalServerError, "Failed to get performance", err.Error())
+	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message": "Portfolio performance - TODO: implement",
-		"user_id": userID,
-		"data": map[string]interface{}{
-			"period":               "1M",
-			"start_value":          145000000,
-			"end_value":            150000000,
-			"total_return":         5000000,
-			"total_return_percent": 3.45,
-			"best_day": map[string]interface{}{
-				"date":           "2024-01-15",
-				"return":         2500000,
-				"return_percent": 1.72,
-			},
-			"worst_day": map[string]interface{}{
-				"date":           "2024-01-08",
-				"return":         -1200000,
-				"return_percent": -0.83,
-			},
-			"chart_data": []map[string]interface{}{
-				{"date": "2024-01-01", "value": 145000000},
-				{"date": "2024-01-08", "value": 143800000},
-				{"date": "2024-01-15", "value": 146300000},
-				{"date": "2024-01-31", "value": 150000000},
-			},
-		},
+	totalPnL, err := h.portfolioUseCase.GetTotalUnrealizedPnL(c.Request().Context(), userID)
+	if err != nil {
+		h.logger.Warn("GetTotalUnrealizedPnL failed", zap.Error(err))
+	}
+
+	var pnlPercent float64
+	costBasis := totalValue - totalPnL
+	if costBasis > 0 {
+		pnlPercent = (totalPnL / costBasis) * 100
+	}
+
+	return response.Success(c, http.StatusOK, "Portfolio performance retrieved", PortfolioPerformanceResponse{
+		UserID:             userID,
+		TotalValue:         totalValue,
+		TotalUnrealizedPnL: totalPnL,
+		PnLPercent:         pnlPercent,
 	})
 }

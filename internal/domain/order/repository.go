@@ -35,4 +35,10 @@ type ReadModelRepository interface {
 
 	// ListByUserIDAndFilter filters by optional symbol and status.
 	ListByUserIDAndFilter(ctx context.Context, userID, symbol, status string, limit, offset int) ([]*OrderReadModel, error)
+
+	// ListAll retrieves all orders across all users (admin use).
+	ListAll(ctx context.Context, limit, offset int) ([]*OrderReadModel, error)
+
+	// CountAll returns the total number of orders across all users (admin use).
+	CountAll(ctx context.Context) (int64, error)
 }

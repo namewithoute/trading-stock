@@ -9,6 +9,7 @@ import (
 	"trading-stock/internal/presentation/router/v1/market"
 	"trading-stock/internal/presentation/router/v1/order"
 	"trading-stock/internal/presentation/router/v1/portfolio"
+	"trading-stock/internal/presentation/router/v1/risk"
 	"trading-stock/internal/presentation/router/v1/trade"
 	userRouter "trading-stock/internal/presentation/router/v1/user"
 	"trading-stock/pkg/jwtservice"
@@ -54,6 +55,7 @@ func (r *Router) Setup() {
 		market.NewMarketRouter(r.handlers.MarketHandler),
 		trade.NewTradeRouter(r.handlers.TradeHandler),
 		admin.NewAdminRouter(r.handlers.AdminHandler),
+		risk.NewRiskRouter(r.handlers.RiskHandler),
 	}
 
 	for _, sr := range subRouters {

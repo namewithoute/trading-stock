@@ -281,3 +281,23 @@ func toDomainReadModels(models []*OrderReadModelDB) []*domain.OrderReadModel {
 	}
 	return result
 }
+
+// ListAll retrieves all orders across all users ordered by created_at DESC.
+func (r *readModelRepo) ListAll(ctx context.Context, limit, offset int) ([]*domain.OrderReadModel, error) {
+	var models []*OrderReadModelDB
+	err := r.db.WithContext(ctx).
+		Order("created_at DESC").
+		Limit(limit).Offset(offset).
+		Find(&models).Error
+	if err != nil {
+		return nil, err
+	}
+	return toDomainReadModels(models), nil
+}
+
+// CountAll returns the total number of orders across all users.
+func (r *readModelRepo) CountAll(ctx context.Context) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&OrderReadModelDB{}).Count(&count).Error
+	return count, err
+}

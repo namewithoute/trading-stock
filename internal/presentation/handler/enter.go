@@ -8,6 +8,7 @@ import (
 	"trading-stock/internal/presentation/handler/market"
 	"trading-stock/internal/presentation/handler/order"
 	"trading-stock/internal/presentation/handler/portfolio"
+	"trading-stock/internal/presentation/handler/risk"
 	"trading-stock/internal/presentation/handler/trade"
 	"trading-stock/internal/presentation/handler/user"
 
@@ -24,6 +25,7 @@ type HandlerGroup struct {
 	MarketHandler    *market.MarketHandler
 	TradeHandler     *trade.TradeHandler
 	AdminHandler     *admin.AdminHandler
+	RiskHandler      *risk.RiskHandler
 }
 
 // NewHandlerGroup initialises all handlers with their respective use cases.
@@ -37,5 +39,6 @@ func NewHandlerGroup(services *application.Usecases, logger *zap.Logger) *Handle
 		MarketHandler:    market.NewMarketHandler(services.Market, logger),
 		TradeHandler:     trade.NewTradeHandler(services.Trade, logger),
 		AdminHandler:     admin.NewAdminHandler(services.Admin, logger),
+		RiskHandler:      risk.NewRiskHandler(services.Risk, logger),
 	}
 }

@@ -2,7 +2,9 @@
 
 import (
 	"net/http"
+	"strconv"
 	executionUC "trading-stock/internal/application/execution"
+	"trading-stock/pkg/response"
 
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
@@ -26,134 +28,76 @@ func NewTradeHandler(tradeUseCase executionUC.UseCase, logger *zap.Logger) *Trad
 // GET /api/v1/trades/market/:symbol
 func (h *TradeHandler) GetMarketTrades(c echo.Context) error {
 	symbol := c.Param("symbol")
+	if symbol == "" {
+		return response.Error(c, http.StatusBadRequest, "Symbol is required", "symbol_empty")
+	}
 
-	// TODO: Implement get market trades logic
-	// 1. Get symbol from URL param
-	// 2. Parse query params (limit, from, to)
-	// 3. Fetch recent trades from database/cache
-	// 4. Return public trade data (without user info)
+	limit := 20
+	if l := c.QueryParam("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 {
+			limit = n
+		}
+	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message": "Get market trades - TODO: implement",
-		"symbol":  symbol,
-		"data": []map[string]interface{}{
-			{
-				"trade_id":  "mkt_trd_001",
-				"price":     87000,
-				"quantity":  100,
-				"side":      "buy",
-				"timestamp": "2024-01-01T14:30:15Z",
-			},
-			{
-				"trade_id":  "mkt_trd_002",
-				"price":     86900,
-				"quantity":  200,
-				"side":      "sell",
-				"timestamp": "2024-01-01T14:30:10Z",
-			},
-			{
-				"trade_id":  "mkt_trd_003",
-				"price":     87100,
-				"quantity":  150,
-				"side":      "buy",
-				"timestamp": "2024-01-01T14:30:05Z",
-			},
-		},
-	})
+	trades, err := h.tradeUseCase.GetMarketTrades(c.Request().Context(), symbol, limit)
+	if err != nil {
+		h.logger.Error("GetMarketTrades failed", zap.Error(err), zap.String("symbol", symbol))
+		return response.Error(c, http.StatusInternalServerError, "Failed to get market trades", err.Error())
+	}
+
+	dtos := make([]TradeDTO, 0, len(trades))
+	for _, t := range trades {
+		dtos = append(dtos, toTradeDTO(t))
+	}
+
+	return response.Success(c, http.StatusOK, "Market trades retrieved", dtos)
 }
 
 // ListTrades lists user's trade history (protected)
 // GET /api/v1/trades
 func (h *TradeHandler) ListTrades(c echo.Context) error {
-	userID := c.Get("user_id")
+	userID, ok := c.Get("user_id").(string)
+	if !ok || userID == "" {
+		return response.Error(c, http.StatusUnauthorized, "User not authenticated", "unauthorized")
+	}
 
-	// TODO: Implement list trades logic
-	// 1. Get user ID from context
-	// 2. Parse query params (symbol, side, from, to, page, limit)
-	// 3. Fetch user's trades from database with filters
-	// 4. Calculate total P&L
-	// 5. Return paginated trade history
+	trades, err := h.tradeUseCase.ListTrades(c.Request().Context(), userID)
+	if err != nil {
+		h.logger.Error("ListTrades failed", zap.Error(err), zap.String("user_id", userID))
+		return response.Error(c, http.StatusInternalServerError, "Failed to list trades", err.Error())
+	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message": "List trades - TODO: implement",
-		"user_id": userID,
-		"data": []map[string]interface{}{
-			{
-				"trade_id":     "trd_001",
-				"order_id":     "ord_001",
-				"symbol":       "VNM",
-				"side":         "buy",
-				"quantity":     100,
-				"price":        85000,
-				"total_amount": 8500000,
-				"fee":          8500,
-				"timestamp":    "2024-01-01T10:00:00Z",
-			},
-			{
-				"trade_id":     "trd_002",
-				"order_id":     "ord_002",
-				"symbol":       "HPG",
-				"side":         "sell",
-				"quantity":     200,
-				"price":        56000,
-				"total_amount": 11200000,
-				"fee":          11200,
-				"profit_loss":  200000,
-				"timestamp":    "2024-01-02T11:30:00Z",
-			},
-		},
-		"summary": map[string]interface{}{
-			"total_trades":      2,
-			"total_buy_amount":  8500000,
-			"total_sell_amount": 11200000,
-			"total_fees":        19700,
-			"net_profit_loss":   200000,
-		},
-		"pagination": map[string]interface{}{
-			"page":  1,
-			"limit": 20,
-			"total": 2,
-		},
-	})
+	dtos := make([]TradeDTO, 0, len(trades))
+	for _, t := range trades {
+		dtos = append(dtos, toTradeDTO(t))
+	}
+
+	return response.Success(c, http.StatusOK, "Trade history retrieved", dtos)
 }
 
 // GetTradeDetail gets trade details (protected)
 // GET /api/v1/trades/:id
 func (h *TradeHandler) GetTradeDetail(c echo.Context) error {
 	tradeID := c.Param("id")
-	userID := c.Get("user_id")
+	userID, ok := c.Get("user_id").(string)
+	if !ok || userID == "" {
+		return response.Error(c, http.StatusUnauthorized, "User not authenticated", "unauthorized")
+	}
 
-	// TODO: Implement get trade detail logic
-	// 1. Get trade ID from URL param
-	// 2. Get user ID from context
-	// 3. Verify trade belongs to user
-	// 4. Fetch trade details from database
-	// 5. Include related order info
-	// 6. Calculate P&L if applicable
-	// 7. Return detailed trade info
+	if tradeID == "" {
+		return response.Error(c, http.StatusBadRequest, "Trade ID is required", "trade_id_empty")
+	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message": "Get trade detail - TODO: implement",
-		"user_id": userID,
-		"data": map[string]interface{}{
-			"trade_id":        tradeID,
-			"order_id":        "ord_001",
-			"symbol":          "VNM",
-			"side":            "buy",
-			"quantity":        100,
-			"price":           85000,
-			"total_amount":    8500000,
-			"fee":             8500,
-			"fee_type":        "percentage",
-			"fee_rate":        0.1,
-			"timestamp":       "2024-01-01T10:00:00Z",
-			"settlement_date": "2024-01-03",
-			"order_info": map[string]interface{}{
-				"order_id":       "ord_001",
-				"order_type":     "limit",
-				"order_price":    85000,
-				"order_quantity": 100,
-			},
-		},
-	})
+	trade, err := h.tradeUseCase.GetTradeDetail(c.Request().Context(), tradeID)
+	if err != nil {
+		h.logger.Error("GetTradeDetail failed", zap.Error(err), zap.String("trade_id", tradeID))
+		return response.Error(c, http.StatusNotFound, "Trade not found", err.Error())
+	}
+
+	// Verify the trade belongs to the requesting user.
+	if trade.BuyerID != userID && trade.SellerID != userID {
+		return response.Error(c, http.StatusForbidden, "Access denied", "you do not own this trade")
+	}
+
+	return response.Success(c, http.StatusOK, "Trade detail retrieved", toTradeDTO(trade))
 }

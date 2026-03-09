@@ -1,0 +1,679 @@
+{
+  "info": {
+    "_postman_id": "trading-stock-complete-v1",
+    "name": "Trading Stock – Complete API",
+    "description": "Complete Postman collection for the Trading Stock API.\n\n**Variables needed in your Postman Environment:**\n- `base_url` → `http://localhost:8080`\n- `access_token` → filled automatically by the Login request\n- `refresh_token` → filled automatically by the Login request\n- `user_id` → filled automatically by the Login request\n- `account_id` → fill after creating an account\n- `order_id` → fill after creating an order\n- `trade_id` → fill after a trade executes",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url",      "value": "http://localhost:8080" },
+    { "key": "access_token",  "value": "" },
+    { "key": "refresh_token", "value": "" },
+    { "key": "user_id",       "value": "" },
+    { "key": "account_id",    "value": "" },
+    { "key": "order_id",      "value": "" },
+    { "key": "trade_id",      "value": "" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "🔐 Auth",
+      "item": [
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.token) {",
+                  "    pm.collectionVariables.set('access_token', json.data.token);",
+                  "    pm.collectionVariables.set('user_id', json.data.user_id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": { "type": "noauth" },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/v1/auth/register", "host": ["{{base_url}}"], "path": ["api","v1","auth","register"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"trader@example.com\",\n  \"password\": \"Password123!\",\n  \"name\": \"Nguyen Van A\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data) {",
+                  "    pm.collectionVariables.set('access_token', json.data.access_token);",
+                  "    pm.collectionVariables.set('refresh_token', json.data.refresh_token);",
+                  "    pm.collectionVariables.set('user_id', json.data.user_id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": { "type": "noauth" },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api","v1","auth","login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"trader@example.com\",\n  \"password\": \"Password123!\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.access_token) {",
+                  "    pm.collectionVariables.set('access_token', json.data.access_token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": { "type": "noauth" },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/v1/auth/refresh", "host": ["{{base_url}}"], "path": ["api","v1","auth","refresh"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/v1/auth/logout", "host": ["{{base_url}}"], "path": ["api","v1","auth","logout"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "👤 Users",
+      "item": [
+        {
+          "name": "Get Public Profile",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "noauth" },
+            "url": { "raw": "{{base_url}}/api/v1/users/{{user_id}}/public", "host": ["{{base_url}}"], "path": ["api","v1","users","{{user_id}}","public"] }
+          }
+        },
+        {
+          "name": "Get My Profile",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/v1/users/me", "host": ["{{base_url}}"], "path": ["api","v1","users","me"] }
+          }
+        },
+        {
+          "name": "Update My Profile",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/v1/users/me", "host": ["{{base_url}}"], "path": ["api","v1","users","me"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Nguyen\",\n  \"last_name\": \"Van A\",\n  \"phone\": \"+84912345678\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Verify Email",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{base_url}}/api/v1/users/me/verify-email", "host": ["{{base_url}}"], "path": ["api","v1","users","me","verify-email"] }
+          }
+        },
+        {
+          "name": "Submit KYC",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{base_url}}/api/v1/users/me/kyc", "host": ["{{base_url}}"], "path": ["api","v1","users","me","kyc"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🏦 Accounts",
+      "item": [
+        {
+          "name": "Verify Account Exists (Public)",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "noauth" },
+            "url": { "raw": "{{base_url}}/api/v1/accounts/verify/ACC-001", "host": ["{{base_url}}"], "path": ["api","v1","accounts","verify","ACC-001"] }
+          }
+        },
+        {
+          "name": "List My Accounts",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/v1/accounts", "host": ["{{base_url}}"], "path": ["api","v1","accounts"] }
+          }
+        },
+        {
+          "name": "Create Account",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('account_id', json.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/v1/accounts", "host": ["{{base_url}}"], "path": ["api","v1","accounts"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_type\": \"cash\",\n  \"currency\": \"VND\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Account Detail",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/v1/accounts/{{account_id}}", "host": ["{{base_url}}"], "path": ["api","v1","accounts","{{account_id}}"] }
+          }
+        },
+        {
+          "name": "Deposit",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/v1/accounts/{{account_id}}/deposit", "host": ["{{base_url}}"], "path": ["api","v1","accounts","{{account_id}}","deposit"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 10000000\n}"
+            }
+          }
+        },
+        {
+          "name": "Withdraw",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/v1/accounts/{{account_id}}/withdraw", "host": ["{{base_url}}"], "path": ["api","v1","accounts","{{account_id}}","withdraw"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 1000000\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📈 Market",
+      "item": [
+        {
+          "name": "Get Trending Stocks",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "noauth" },
+            "url": { "raw": "{{base_url}}/api/v1/market/trending", "host": ["{{base_url}}"], "path": ["api","v1","market","trending"] }
+          }
+        },
+        {
+          "name": "List Stocks",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "noauth" },
+            "url": {
+              "raw": "{{base_url}}/api/v1/market/stocks?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api","v1","market","stocks"],
+              "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "20" }]
+            }
+          }
+        },
+        {
+          "name": "Get Stock Detail",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "noauth" },
+            "url": { "raw": "{{base_url}}/api/v1/market/stocks/VNM", "host": ["{{base_url}}"], "path": ["api","v1","market","stocks","VNM"] }
+          }
+        },
+        {
+          "name": "Get Current Price",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "noauth" },
+            "url": { "raw": "{{base_url}}/api/v1/market/stocks/VNM/price", "host": ["{{base_url}}"], "path": ["api","v1","market","stocks","VNM","price"] }
+          }
+        },
+        {
+          "name": "Get Price History",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "noauth" },
+            "url": {
+              "raw": "{{base_url}}/api/v1/market/stocks/VNM/price/history?from=2024-01-01&to=2024-12-31",
+              "host": ["{{base_url}}"],
+              "path": ["api","v1","market","stocks","VNM","price","history"],
+              "query": [{ "key": "from", "value": "2024-01-01" }, { "key": "to", "value": "2024-12-31" }]
+            }
+          }
+        },
+        {
+          "name": "Get Candles (OHLCV)",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "noauth" },
+            "url": {
+              "raw": "{{base_url}}/api/v1/market/stocks/VNM/candles?interval=1d&limit=30",
+              "host": ["{{base_url}}"],
+              "path": ["api","v1","market","stocks","VNM","candles"],
+              "query": [{ "key": "interval", "value": "1d" }, { "key": "limit", "value": "30" }]
+            }
+          }
+        },
+        {
+          "name": "Get Order Book",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "noauth" },
+            "url": { "raw": "{{base_url}}/api/v1/market/stocks/VNM/orderbook", "host": ["{{base_url}}"], "path": ["api","v1","market","stocks","VNM","orderbook"] }
+          }
+        },
+        {
+          "name": "Get Premium Analysis (Protected)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/v1/market/premium/analysis/VNM", "host": ["{{base_url}}"], "path": ["api","v1","market","premium","analysis","VNM"] }
+          }
+        },
+        {
+          "name": "Get My Watchlist",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/v1/market/watchlist", "host": ["{{base_url}}"], "path": ["api","v1","market","watchlist"] }
+          }
+        },
+        {
+          "name": "Add to Watchlist",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/v1/market/watchlist", "host": ["{{base_url}}"], "path": ["api","v1","market","watchlist"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbol\": \"VNM\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📋 Orders",
+      "item": [
+        {
+          "name": "Create Order (Limit Buy)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.order_id) {",
+                  "    pm.collectionVariables.set('order_id', json.data.order_id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/v1/orders", "host": ["{{base_url}}"], "path": ["api","v1","orders"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbol\": \"VNM\",\n  \"side\": \"BUY\",\n  \"type\": \"LIMIT\",\n  \"quantity\": 100,\n  \"price\": 85000,\n  \"account_id\": \"{{account_id}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Order (Market Sell)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/v1/orders", "host": ["{{base_url}}"], "path": ["api","v1","orders"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbol\": \"HPG\",\n  \"side\": \"SELL\",\n  \"type\": \"MARKET\",\n  \"quantity\": 50,\n  \"price\": 0,\n  \"account_id\": \"{{account_id}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Order (Stop Loss)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/v1/orders", "host": ["{{base_url}}"], "path": ["api","v1","orders"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbol\": \"VNM\",\n  \"side\": \"SELL\",\n  \"type\": \"STOP_LOSS\",\n  \"quantity\": 100,\n  \"price\": 80000,\n  \"account_id\": \"{{account_id}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List My Orders",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/orders?status=PENDING&symbol=VNM&page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api","v1","orders"],
+              "query": [
+                { "key": "status", "value": "PENDING" },
+                { "key": "symbol", "value": "VNM" },
+                { "key": "page",   "value": "1" },
+                { "key": "limit",  "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Order Detail",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/v1/orders/{{order_id}}", "host": ["{{base_url}}"], "path": ["api","v1","orders","{{order_id}}"] }
+          }
+        },
+        {
+          "name": "Update Order (Reprice)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/v1/orders/{{order_id}}", "host": ["{{base_url}}"], "path": ["api","v1","orders","{{order_id}}"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"price\": 84000,\n  \"quantity\": 150\n}"
+            }
+          }
+        },
+        {
+          "name": "Cancel Order",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{base_url}}/api/v1/orders/{{order_id}}", "host": ["{{base_url}}"], "path": ["api","v1","orders","{{order_id}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "💼 Portfolio",
+      "item": [
+        {
+          "name": "Get Portfolio Overview",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/v1/portfolio", "host": ["{{base_url}}"], "path": ["api","v1","portfolio"] }
+          }
+        },
+        {
+          "name": "List Positions",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/v1/portfolio/positions", "host": ["{{base_url}}"], "path": ["api","v1","portfolio","positions"] }
+          }
+        },
+        {
+          "name": "Get Position by Symbol",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/v1/portfolio/positions/VNM", "host": ["{{base_url}}"], "path": ["api","v1","portfolio","positions","VNM"] }
+          }
+        },
+        {
+          "name": "Get Performance",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/v1/portfolio/performance", "host": ["{{base_url}}"], "path": ["api","v1","portfolio","performance"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "💱 Trades",
+      "item": [
+        {
+          "name": "Get Market Trades (Public)",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "noauth" },
+            "url": {
+              "raw": "{{base_url}}/api/v1/trades/market/VNM?limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api","v1","trades","market","VNM"],
+              "query": [{ "key": "limit", "value": "20" }]
+            }
+          }
+        },
+        {
+          "name": "List My Trades",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/v1/trades", "host": ["{{base_url}}"], "path": ["api","v1","trades"] }
+          }
+        },
+        {
+          "name": "Get Trade Detail",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/v1/trades/{{trade_id}}", "host": ["{{base_url}}"], "path": ["api","v1","trades","{{trade_id}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "⚠️ Risk",
+      "item": [
+        {
+          "name": "Get Risk Metrics",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/v1/risk/metrics/{{account_id}}", "host": ["{{base_url}}"], "path": ["api","v1","risk","metrics","{{account_id}}"] }
+          }
+        },
+        {
+          "name": "Get Active Alerts",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/v1/risk/alerts/{{account_id}}", "host": ["{{base_url}}"], "path": ["api","v1","risk","alerts","{{account_id}}"] }
+          }
+        },
+        {
+          "name": "Check Order Risk",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/v1/risk/check", "host": ["{{base_url}}"], "path": ["api","v1","risk","check"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_id\": \"{{account_id}}\",\n  \"symbol\": \"VNM\",\n  \"amount\": 8500000\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🛡️ Admin",
+      "item": [
+        {
+          "name": "List All Users",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/users?limit=20&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["api","v1","admin","users"],
+              "query": [{ "key": "limit", "value": "20" }, { "key": "offset", "value": "0" }]
+            }
+          }
+        },
+        {
+          "name": "Approve KYC",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/v1/admin/users/{{user_id}}/kyc", "host": ["{{base_url}}"], "path": ["api","v1","admin","users","{{user_id}}","kyc"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"APPROVED\",\n  \"reason\": \"Documents verified successfully\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Reject KYC",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/v1/admin/users/{{user_id}}/kyc", "host": ["{{base_url}}"], "path": ["api","v1","admin","users","{{user_id}}","kyc"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"REJECTED\",\n  \"reason\": \"ID document is expired\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List All Orders",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/orders?limit=20&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["api","v1","admin","orders"],
+              "query": [{ "key": "limit", "value": "20" }, { "key": "offset", "value": "0" }]
+            }
+          }
+        },
+        {
+          "name": "Get System Stats",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/v1/admin/stats", "host": ["{{base_url}}"], "path": ["api","v1","admin","stats"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔄 V2 – Public Prefixed",
+      "description": "V2 uses /api/v2/public for unauthenticated routes and /api/v2/private for authenticated routes.",
+      "item": [
+        {
+          "name": "V2 Register",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "noauth" },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/v2/public/auth/register", "host": ["{{base_url}}"], "path": ["api","v2","public","auth","register"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"traderv2@example.com\",\n  \"password\": \"Password123!\",\n  \"name\": \"Tran Thi B\"\n}"
+            }
+          }
+        },
+        {
+          "name": "V2 Login",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "noauth" },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/v2/public/auth/login", "host": ["{{base_url}}"], "path": ["api","v2","public","auth","login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"traderv2@example.com\",\n  \"password\": \"Password123!\"\n}"
+            }
+          }
+        },
+        {
+          "name": "V2 List Stocks (Public)",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "noauth" },
+            "url": { "raw": "{{base_url}}/api/v2/public/market/stocks", "host": ["{{base_url}}"], "path": ["api","v2","public","market","stocks"] }
+          }
+        },
+        {
+          "name": "V2 Market Trades by Symbol (Public)",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "noauth" },
+            "url": { "raw": "{{base_url}}/api/v2/public/trades/market/VNM", "host": ["{{base_url}}"], "path": ["api","v2","public","trades","market","VNM"] }
+          }
+        },
+        {
+          "name": "V2 Get My Profile (Private)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/v2/private/users/me", "host": ["{{base_url}}"], "path": ["api","v2","private","users","me"] }
+          }
+        },
+        {
+          "name": "V2 Portfolio Overview (Private)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/v2/private/portfolio", "host": ["{{base_url}}"], "path": ["api","v2","private","portfolio"] }
+          }
+        },
+        {
+          "name": "V2 Create Order (Private)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/v2/private/orders", "host": ["{{base_url}}"], "path": ["api","v2","private","orders"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbol\": \"HPG\",\n  \"side\": \"BUY\",\n  \"type\": \"LIMIT\",\n  \"quantity\": 200,\n  \"price\": 55000,\n  \"account_id\": \"{{account_id}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "V2 Risk Metrics (Private)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/v2/private/risk/metrics/{{account_id}}", "host": ["{{base_url}}"], "path": ["api","v2","private","risk","metrics","{{account_id}}"] }
+          }
+        }
+      ]
+    }
+  ]
+}

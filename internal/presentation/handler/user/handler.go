@@ -3,6 +3,7 @@
 import (
 	"net/http"
 	userUC "trading-stock/internal/application/user"
+	"trading-stock/pkg/response"
 
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
@@ -26,96 +27,132 @@ func NewUserHandler(userUseCase userUC.UseCase, logger *zap.Logger) *UserHandler
 // GET /api/v1/users/:id/public
 func (h *UserHandler) GetPublicProfile(c echo.Context) error {
 	userID := c.Param("id")
+	if userID == "" {
+		return response.Error(c, http.StatusBadRequest, "User ID is required", "user_id_empty")
+	}
 
-	// TODO: Implement get public profile logic
-	// 1. Get user ID from URL param
-	// 2. Fetch public user info from database (exclude sensitive data)
-	// 3. Return public profile
+	u, err := h.userUseCase.GetProfile(c.Request().Context(), userID)
+	if err != nil {
+		h.logger.Error("GetPublicProfile failed", zap.Error(err), zap.String("user_id", userID))
+		return response.Error(c, http.StatusNotFound, "User not found", err.Error())
+	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message": "Get public profile - TODO: implement",
-		"data": map[string]interface{}{
-			"user_id":     userID,
-			"username":    "john_doe",
-			"avatar":      "https://example.com/avatar.jpg",
-			"joined_date": "2024-01-01",
-		},
+	return response.Success(c, http.StatusOK, "Public profile retrieved", PublicProfileResponse{
+		UserID:    u.ID,
+		Username:  u.Username,
+		FullName:  u.FullName(),
+		CreatedAt: u.CreatedAt,
 	})
 }
 
 // GetProfile gets current user's profile (protected)
 // GET /api/v1/users/me
 func (h *UserHandler) GetProfile(c echo.Context) error {
-	userID := c.Get("user_id")
+	userID, ok := c.Get("user_id").(string)
+	if !ok || userID == "" {
+		return response.Error(c, http.StatusUnauthorized, "User not authenticated", "unauthorized")
+	}
 
-	// TODO: Implement get profile logic
-	// 1. Get user ID from context (set by auth middleware)
-	// 2. Fetch user info from database
-	// 3. Return full profile
+	u, err := h.userUseCase.GetProfile(c.Request().Context(), userID)
+	if err != nil {
+		h.logger.Error("GetProfile failed", zap.Error(err), zap.String("user_id", userID))
+		return response.Error(c, http.StatusInternalServerError, "Failed to get profile", err.Error())
+	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message": "Get profile - TODO: implement",
-		"data": map[string]interface{}{
-			"user_id":    userID,
-			"email":      "user@example.com",
-			"name":       "John Doe",
-			"phone":      "+84123456789",
-			"kyc_status": "pending",
-		},
+	return response.Success(c, http.StatusOK, "Profile retrieved", UserProfileResponse{
+		UserID:        u.ID,
+		Email:         u.Email,
+		Username:      u.Username,
+		FirstName:     u.FirstName,
+		LastName:      u.LastName,
+		Phone:         u.Phone,
+		EmailVerified: u.EmailVerified,
+		KYCStatus:     string(u.KYCStatus),
+		Status:        string(u.Status),
+		Role:          string(u.Role),
+		CreatedAt:     u.CreatedAt,
+		LastLogin:     u.LastLogin,
 	})
 }
 
 // UpdateProfile updates current user's profile (protected)
 // PUT /api/v1/users/me
 func (h *UserHandler) UpdateProfile(c echo.Context) error {
-	userID := c.Get("user_id")
+	userID, ok := c.Get("user_id").(string)
+	if !ok || userID == "" {
+		return response.Error(c, http.StatusUnauthorized, "User not authenticated", "unauthorized")
+	}
 
-	// TODO: Implement update profile logic
-	// 1. Get user ID from context
-	// 2. Parse request body (name, phone, avatar, etc.)
-	// 3. Validate input
-	// 4. Update user in database
-	// 5. Return updated profile
+	var req UpdateProfileRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "Invalid request payload", err.Error())
+	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message": "Update profile - TODO: implement",
-		"user_id": userID,
+	data := map[string]interface{}{
+		"first_name": req.FirstName,
+		"last_name":  req.LastName,
+		"phone":      req.Phone,
+	}
+
+	if err := h.userUseCase.UpdateProfile(c.Request().Context(), userID, data); err != nil {
+		h.logger.Error("UpdateProfile failed", zap.Error(err), zap.String("user_id", userID))
+		return response.Error(c, http.StatusInternalServerError, "Failed to update profile", err.Error())
+	}
+
+	u, _ := h.userUseCase.GetProfile(c.Request().Context(), userID)
+	if u == nil {
+		return response.Success(c, http.StatusOK, "Profile updated successfully", nil)
+	}
+
+	return response.Success(c, http.StatusOK, "Profile updated successfully", UserProfileResponse{
+		UserID:        u.ID,
+		Email:         u.Email,
+		Username:      u.Username,
+		FirstName:     u.FirstName,
+		LastName:      u.LastName,
+		Phone:         u.Phone,
+		EmailVerified: u.EmailVerified,
+		KYCStatus:     string(u.KYCStatus),
+		Status:        string(u.Status),
+		Role:          string(u.Role),
+		CreatedAt:     u.CreatedAt,
+		LastLogin:     u.LastLogin,
 	})
 }
 
 // VerifyEmail verifies user's email (protected)
 // POST /api/v1/users/me/verify-email
 func (h *UserHandler) VerifyEmail(c echo.Context) error {
-	userID := c.Get("user_id")
+	userID, ok := c.Get("user_id").(string)
+	if !ok || userID == "" {
+		return response.Error(c, http.StatusUnauthorized, "User not authenticated", "unauthorized")
+	}
 
-	// TODO: Implement email verification logic
-	// 1. Get user ID from context
-	// 2. Parse verification code from request
-	// 3. Validate code
-	// 4. Update email_verified status
-	// 5. Return success
+	if err := h.userUseCase.VerifyEmail(c.Request().Context(), userID); err != nil {
+		h.logger.Error("VerifyEmail failed", zap.Error(err), zap.String("user_id", userID))
+		return response.Error(c, http.StatusInternalServerError, "Failed to verify email", err.Error())
+	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message": "Email verified successfully",
+	return response.Success(c, http.StatusOK, "Email verified successfully", map[string]string{
 		"user_id": userID,
+		"status":  "verified",
 	})
 }
 
 // SubmitKYC submits KYC documents (protected)
 // POST /api/v1/users/me/kyc
 func (h *UserHandler) SubmitKYC(c echo.Context) error {
-	userID := c.Get("user_id")
+	userID, ok := c.Get("user_id").(string)
+	if !ok || userID == "" {
+		return response.Error(c, http.StatusUnauthorized, "User not authenticated", "unauthorized")
+	}
 
-	// TODO: Implement KYC submission logic
-	// 1. Get user ID from context
-	// 2. Parse KYC documents (ID card, selfie, address proof)
-	// 3. Upload files to storage (S3/MinIO)
-	// 4. Create KYC record in database
-	// 5. Set status to "pending"
-	// 6. Return success
+	if err := h.userUseCase.SubmitKYC(c.Request().Context(), userID); err != nil {
+		h.logger.Error("SubmitKYC failed", zap.Error(err), zap.String("user_id", userID))
+		return response.Error(c, http.StatusInternalServerError, "Failed to submit KYC", err.Error())
+	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message": "KYC submitted successfully",
+	return response.Success(c, http.StatusOK, "KYC submitted successfully", map[string]string{
 		"user_id": userID,
 		"status":  "pending",
 	})
