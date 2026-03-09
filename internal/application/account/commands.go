@@ -1,5 +1,7 @@
 package account
 
+import "github.com/cockroachdb/apd/v3"
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Command messages — the application layer's write-side DTOs.
 //
@@ -17,25 +19,25 @@ type CreateAccountCommand struct {
 // DepositCommand adds funds to an existing account.
 type DepositCommand struct {
 	AccountID string
-	Amount    float64
+	Amount    apd.Decimal
 }
 
 // WithdrawCommand removes funds from an account.
 type WithdrawCommand struct {
 	AccountID string
-	Amount    float64
+	Amount    apd.Decimal
 }
 
 // ReserveFundsCommand reduces BuyingPower when a buy order is placed.
 type ReserveFundsCommand struct {
 	AccountID string
-	Amount    float64
+	Amount    apd.Decimal
 }
 
 // ReleaseFundsCommand restores BuyingPower when a buy order is cancelled.
 type ReleaseFundsCommand struct {
 	AccountID string
-	Amount    float64
+	Amount    apd.Decimal
 }
 
 // FreezeAccountCommand suspends an account (no trading allowed).

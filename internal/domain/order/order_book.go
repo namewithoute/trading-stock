@@ -1,5 +1,13 @@
 package order
 
+import (
+	"sort"
+
+	"github.com/cockroachdb/apd/v3"
+)
+
+var obDecCtx = apd.BaseContext.WithPrecision(19)
+
 // OrderBook represents a collection of buy and sell orders for a specific symbol
 // This is used for order matching in the execution engine
 type OrderBook struct {
@@ -66,51 +74,61 @@ func (ob *OrderBook) BestAsk() *Order {
 }
 
 // Spread returns the difference between best ask and best bid
-func (ob *OrderBook) Spread() float64 {
+func (ob *OrderBook) Spread() apd.Decimal {
 	bestBid := ob.BestBid()
 	bestAsk := ob.BestAsk()
 
 	if bestBid == nil || bestAsk == nil {
-		return 0
+		return apd.Decimal{}
 	}
 
-	return bestAsk.Price - bestBid.Price
+	var spread apd.Decimal
+	_, _ = obDecCtx.Sub(&spread, &bestAsk.Price, &bestBid.Price)
+	return spread
 }
 
 // Depth returns the total quantity at each price level
 type Depth struct {
-	Price    float64 `json:"price"`
-	Quantity int     `json:"quantity"`
+	Price    apd.Decimal `json:"price"`
+	Quantity int         `json:"quantity"`
 }
 
 // GetBidDepth returns the bid depth (aggregated by price)
 func (ob *OrderBook) GetBidDepth() []Depth {
-	depthMap := make(map[float64]int)
+	depthMap := make(map[string]*Depth)
 	for _, order := range ob.Bids {
-		depthMap[order.Price] += order.RemainingQuantity()
+		key := order.Price.String()
+		if d, ok := depthMap[key]; ok {
+			d.Quantity += order.RemainingQuantity()
+		} else {
+			depthMap[key] = &Depth{Price: order.Price, Quantity: order.RemainingQuantity()}
+		}
 	}
 
 	depths := make([]Depth, 0, len(depthMap))
-	for price, qty := range depthMap {
-		depths = append(depths, Depth{Price: price, Quantity: qty})
+	for _, d := range depthMap {
+		depths = append(depths, *d)
 	}
-
-	// TODO: Sort by price DESC
+	sort.Slice(depths, func(i, j int) bool { return depths[i].Price.Cmp(&depths[j].Price) > 0 })
 	return depths
 }
 
 // GetAskDepth returns the ask depth (aggregated by price)
 func (ob *OrderBook) GetAskDepth() []Depth {
-	depthMap := make(map[float64]int)
+	depthMap := make(map[string]*Depth)
 	for _, order := range ob.Asks {
-		depthMap[order.Price] += order.RemainingQuantity()
+		key := order.Price.String()
+		if d, ok := depthMap[key]; ok {
+			d.Quantity += order.RemainingQuantity()
+		} else {
+			depthMap[key] = &Depth{Price: order.Price, Quantity: order.RemainingQuantity()}
+		}
 	}
 
 	depths := make([]Depth, 0, len(depthMap))
-	for price, qty := range depthMap {
-		depths = append(depths, Depth{Price: price, Quantity: qty})
+	for _, d := range depthMap {
+		depths = append(depths, *d)
 	}
-
-	// TODO: Sort by price ASC
+	sort.Slice(depths, func(i, j int) bool { return depths[i].Price.Cmp(&depths[j].Price) < 0 })
 	return depths
 }

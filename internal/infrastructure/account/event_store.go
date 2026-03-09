@@ -9,6 +9,8 @@ import (
 
 	domain "trading-stock/internal/domain/account"
 
+	"github.com/cockroachdb/apd/v3"
+
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -31,15 +33,15 @@ func (AccountEventModel) TableName() string { return "account_events" }
 
 // AccountReadModel maps to `account_read_models` – the denormalised query table.
 type AccountReadModelDB struct {
-	ID          string    `gorm:"primaryKey;type:uuid"`
-	UserID      string    `gorm:"type:uuid;index;not null"`
-	AccountType string    `gorm:"type:varchar(20);not null"`
-	Balance     float64   `gorm:"type:decimal(20,2);not null;default:0"`
-	BuyingPower float64   `gorm:"type:decimal(20,2);not null;default:0"`
-	Currency    string    `gorm:"type:varchar(3);not null;default:'USD'"`
-	Status      string    `gorm:"type:varchar(20);not null"`
-	Version     int       `gorm:"not null;default:0"`
-	UpdatedAt   time.Time `gorm:"not null"`
+	ID          string      `gorm:"primaryKey;type:uuid"`
+	UserID      string      `gorm:"type:uuid;index;not null"`
+	AccountType string      `gorm:"type:varchar(20);not null"`
+	Balance     apd.Decimal `gorm:"type:decimal(20,2);not null;default:0"`
+	BuyingPower apd.Decimal `gorm:"type:decimal(20,2);not null;default:0"`
+	Currency    string      `gorm:"type:varchar(3);not null;default:'USD'"`
+	Status      string      `gorm:"type:varchar(20);not null"`
+	Version     int         `gorm:"not null;default:0"`
+	UpdatedAt   time.Time   `gorm:"not null"`
 }
 
 func (AccountReadModelDB) TableName() string { return "account_read_models" }

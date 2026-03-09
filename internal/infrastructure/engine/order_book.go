@@ -3,9 +3,12 @@ package engine
 import (
 	"container/heap"
 	"fmt"
+	"sort"
 	"sync"
 
 	"trading-stock/internal/domain/order"
+
+	"github.com/cockroachdb/apd/v3"
 )
 
 // OrderBook manages buy and sell orders for a specific symbol
@@ -110,7 +113,7 @@ func (ob *OrderBook) BestAsk() *order.Order {
 }
 
 // Spread returns the difference between best ask and best bid
-func (ob *OrderBook) Spread() float64 {
+func (ob *OrderBook) Spread() apd.Decimal {
 	ob.mu.RLock()
 	defer ob.mu.RUnlock()
 
@@ -118,14 +121,16 @@ func (ob *OrderBook) Spread() float64 {
 	bestAsk := ob.BestAsk()
 
 	if bestBid == nil || bestAsk == nil {
-		return 0
+		return apd.Decimal{}
 	}
 
-	return bestAsk.Price - bestBid.Price
+	var spread apd.Decimal
+	_, _ = decCtx.Sub(&spread, &bestAsk.Price, &bestBid.Price)
+	return spread
 }
 
 // MidPrice returns the mid price between best bid and ask
-func (ob *OrderBook) MidPrice() float64 {
+func (ob *OrderBook) MidPrice() apd.Decimal {
 	ob.mu.RLock()
 	defer ob.mu.RUnlock()
 
@@ -133,17 +138,20 @@ func (ob *OrderBook) MidPrice() float64 {
 	bestAsk := ob.BestAsk()
 
 	if bestBid == nil || bestAsk == nil {
-		return 0
+		return apd.Decimal{}
 	}
 
-	return (bestBid.Price + bestAsk.Price) / 2
+	var sum, mid apd.Decimal
+	_, _ = decCtx.Add(&sum, &bestBid.Price, &bestAsk.Price)
+	_, _ = decCtx.Quo(&mid, &sum, apd.New(2, 0))
+	return mid
 }
 
 // Depth returns the total quantity at each price level
 type DepthLevel struct {
-	Price    float64 `json:"price"`
-	Quantity int     `json:"quantity"`
-	Orders   int     `json:"orders"` // Number of orders at this level
+	Price    apd.Decimal `json:"price"`
+	Quantity int         `json:"orders"`       // Note: json tag preserved
+	Orders   int         `json:"orders_count"` // Number of orders at this level
 }
 
 // GetBidDepth returns aggregated bid depth
@@ -151,14 +159,15 @@ func (ob *OrderBook) GetBidDepth(levels int) []DepthLevel {
 	ob.mu.RLock()
 	defer ob.mu.RUnlock()
 
-	depthMap := make(map[float64]*DepthLevel)
+	depthMap := make(map[string]*DepthLevel)
 
 	for _, o := range *ob.Bids {
-		if level, exists := depthMap[o.Price]; exists {
+		key := o.Price.String()
+		if level, exists := depthMap[key]; exists {
 			level.Quantity += o.RemainingQuantity()
 			level.Orders++
 		} else {
-			depthMap[o.Price] = &DepthLevel{
+			depthMap[key] = &DepthLevel{
 				Price:    o.Price,
 				Quantity: o.RemainingQuantity(),
 				Orders:   1,
@@ -166,22 +175,16 @@ func (ob *OrderBook) GetBidDepth(levels int) []DepthLevel {
 		}
 	}
 
-	// Convert map to slice and sort by price DESC
 	depths := make([]DepthLevel, 0, len(depthMap))
 	for _, level := range depthMap {
 		depths = append(depths, *level)
 	}
 
 	// Sort by price descending (highest first)
-	for i := 0; i < len(depths)-1; i++ {
-		for j := i + 1; j < len(depths); j++ {
-			if depths[i].Price < depths[j].Price {
-				depths[i], depths[j] = depths[j], depths[i]
-			}
-		}
-	}
+	sort.Slice(depths, func(i, j int) bool {
+		return depths[i].Price.Cmp(&depths[j].Price) > 0
+	})
 
-	// Return only requested number of levels
 	if levels > 0 && levels < len(depths) {
 		return depths[:levels]
 	}
@@ -193,14 +196,15 @@ func (ob *OrderBook) GetAskDepth(levels int) []DepthLevel {
 	ob.mu.RLock()
 	defer ob.mu.RUnlock()
 
-	depthMap := make(map[float64]*DepthLevel)
+	depthMap := make(map[string]*DepthLevel)
 
 	for _, o := range *ob.Asks {
-		if level, exists := depthMap[o.Price]; exists {
+		key := o.Price.String()
+		if level, exists := depthMap[key]; exists {
 			level.Quantity += o.RemainingQuantity()
 			level.Orders++
 		} else {
-			depthMap[o.Price] = &DepthLevel{
+			depthMap[key] = &DepthLevel{
 				Price:    o.Price,
 				Quantity: o.RemainingQuantity(),
 				Orders:   1,
@@ -208,22 +212,16 @@ func (ob *OrderBook) GetAskDepth(levels int) []DepthLevel {
 		}
 	}
 
-	// Convert map to slice and sort by price ASC
 	depths := make([]DepthLevel, 0, len(depthMap))
 	for _, level := range depthMap {
 		depths = append(depths, *level)
 	}
 
 	// Sort by price ascending (lowest first)
-	for i := 0; i < len(depths)-1; i++ {
-		for j := i + 1; j < len(depths); j++ {
-			if depths[i].Price > depths[j].Price {
-				depths[i], depths[j] = depths[j], depths[i]
-			}
-		}
-	}
+	sort.Slice(depths, func(i, j int) bool {
+		return depths[i].Price.Cmp(&depths[j].Price) < 0
+	})
 
-	// Return only requested number of levels
 	if levels > 0 && levels < len(depths) {
 		return depths[:levels]
 	}
@@ -232,13 +230,13 @@ func (ob *OrderBook) GetAskDepth(levels int) []DepthLevel {
 
 // Stats returns order book statistics
 type OrderBookStats struct {
-	Symbol       string  `json:"symbol"`
-	BidCount     int     `json:"bid_count"`
-	AskCount     int     `json:"ask_count"`
-	BestBidPrice float64 `json:"best_bid_price"`
-	BestAskPrice float64 `json:"best_ask_price"`
-	Spread       float64 `json:"spread"`
-	MidPrice     float64 `json:"mid_price"`
+	Symbol       string      `json:"symbol"`
+	BidCount     int         `json:"bid_count"`
+	AskCount     int         `json:"ask_count"`
+	BestBidPrice apd.Decimal `json:"best_bid_price"`
+	BestAskPrice apd.Decimal `json:"best_ask_price"`
+	Spread       apd.Decimal `json:"spread"`
+	MidPrice     apd.Decimal `json:"mid_price"`
 }
 
 // GetStats returns order book statistics
@@ -288,8 +286,9 @@ func (bq BidQueue) Len() int { return len(bq) }
 
 func (bq BidQueue) Less(i, j int) bool {
 	// Max heap: higher price has priority
-	if bq[i].Price != bq[j].Price {
-		return bq[i].Price > bq[j].Price
+	cmp := bq[i].Price.Cmp(&bq[j].Price)
+	if cmp != 0 {
+		return cmp > 0
 	}
 	// If same price, earlier time has priority (FIFO)
 	return bq[i].CreatedAt.Before(bq[j].CreatedAt)
@@ -318,8 +317,9 @@ func (aq AskQueue) Len() int { return len(aq) }
 
 func (aq AskQueue) Less(i, j int) bool {
 	// Min heap: lower price has priority
-	if aq[i].Price != aq[j].Price {
-		return aq[i].Price < aq[j].Price
+	cmp := aq[i].Price.Cmp(&aq[j].Price)
+	if cmp != 0 {
+		return cmp < 0
 	}
 	// If same price, earlier time has priority (FIFO)
 	return aq[i].CreatedAt.Before(aq[j].CreatedAt)

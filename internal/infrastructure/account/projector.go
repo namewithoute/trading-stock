@@ -8,9 +8,13 @@ import (
 
 	domain "trading-stock/internal/domain/account"
 
+	"github.com/cockroachdb/apd/v3"
+
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
 )
+
+var projDecCtx = apd.BaseContext.WithPrecision(19)
 
 // Projector is a Kafka consumer that listens to account.events and
 // upserts the account_read_models table after each event.
@@ -265,30 +269,30 @@ func applyDescriptor(d EventDescriptor, rm *domain.AccountReadModel) error {
 		if err := json.Unmarshal(d.Payload, &evt); err != nil {
 			return fmt.Errorf("unmarshal MoneyDepositedEvent: %w", err)
 		}
-		rm.Balance += evt.Amount
-		rm.BuyingPower += evt.Amount
+		_, _ = projDecCtx.Add(&rm.Balance, &rm.Balance, &evt.Amount)
+		_, _ = projDecCtx.Add(&rm.BuyingPower, &rm.BuyingPower, &evt.Amount)
 
 	case domain.EventMoneyWithdrawn:
 		var evt domain.MoneyWithdrawnEvent
 		if err := json.Unmarshal(d.Payload, &evt); err != nil {
 			return fmt.Errorf("unmarshal MoneyWithdrawnEvent: %w", err)
 		}
-		rm.Balance -= evt.Amount
-		rm.BuyingPower -= evt.Amount
+		_, _ = projDecCtx.Sub(&rm.Balance, &rm.Balance, &evt.Amount)
+		_, _ = projDecCtx.Sub(&rm.BuyingPower, &rm.BuyingPower, &evt.Amount)
 
 	case domain.EventFundsReserved:
 		var evt domain.FundsReservedEvent
 		if err := json.Unmarshal(d.Payload, &evt); err != nil {
 			return fmt.Errorf("unmarshal FundsReservedEvent: %w", err)
 		}
-		rm.BuyingPower -= evt.Amount
+		_, _ = projDecCtx.Sub(&rm.BuyingPower, &rm.BuyingPower, &evt.Amount)
 
 	case domain.EventFundsReleased:
 		var evt domain.FundsReleasedEvent
 		if err := json.Unmarshal(d.Payload, &evt); err != nil {
 			return fmt.Errorf("unmarshal FundsReleasedEvent: %w", err)
 		}
-		rm.BuyingPower += evt.Amount
+		_, _ = projDecCtx.Add(&rm.BuyingPower, &rm.BuyingPower, &evt.Amount)
 
 	case domain.EventStatusChanged:
 		var evt domain.StatusChangedEvent

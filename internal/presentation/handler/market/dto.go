@@ -1,6 +1,10 @@
 package market
 
-import "time"
+import (
+	"time"
+
+	"github.com/cockroachdb/apd/v3"
+)
 
 // ─── Shared ───────────────────────────────────────────────────────────────────
 
@@ -24,18 +28,18 @@ type ListStocksRequest struct {
 
 // StockDTO is the compact stock summary returned in list responses.
 type StockDTO struct {
-	Symbol     string    `json:"symbol"`
-	Name       string    `json:"name"`
-	Exchange   string    `json:"exchange"`
-	Sector     string    `json:"sector"`
-	Industry   string    `json:"industry"`
-	IsActive   bool      `json:"is_active"`
-	IsTradable bool      `json:"is_tradable"`
-	Price      float64   `json:"price"`
-	Bid        float64   `json:"bid"`
-	Ask        float64   `json:"ask"`
-	Volume     int64     `json:"volume"`
-	PriceAt    time.Time `json:"price_at,omitempty"`
+	Symbol     string      `json:"symbol"`
+	Name       string      `json:"name"`
+	Exchange   string      `json:"exchange"`
+	Sector     string      `json:"sector"`
+	Industry   string      `json:"industry"`
+	IsActive   bool        `json:"is_active"`
+	IsTradable bool        `json:"is_tradable"`
+	Price      apd.Decimal `json:"price"`
+	Bid        apd.Decimal `json:"bid"`
+	Ask        apd.Decimal `json:"ask"`
+	Volume     int64       `json:"volume"`
+	PriceAt    time.Time   `json:"price_at,omitempty"`
 }
 
 // ListStocksResponse wraps a paginated stock list.
@@ -46,46 +50,46 @@ type ListStocksResponse struct {
 
 // StockDetailResponse carries the full per-symbol view.
 type StockDetailResponse struct {
-	Symbol     string    `json:"symbol"`
-	Name       string    `json:"name"`
-	Exchange   string    `json:"exchange"`
-	Sector     string    `json:"sector"`
-	Industry   string    `json:"industry"`
-	IsActive   bool      `json:"is_active"`
-	IsTradable bool      `json:"is_tradable"`
-	CreatedAt  time.Time `json:"created_at"`
-	Price      float64   `json:"price"`
-	Bid        float64   `json:"bid"`
-	Ask        float64   `json:"ask"`
-	Spread     float64   `json:"spread"`
-	Volume     int64     `json:"volume"`
-	PriceAt    time.Time `json:"price_at,omitempty"`
+	Symbol     string      `json:"symbol"`
+	Name       string      `json:"name"`
+	Exchange   string      `json:"exchange"`
+	Sector     string      `json:"sector"`
+	Industry   string      `json:"industry"`
+	IsActive   bool        `json:"is_active"`
+	IsTradable bool        `json:"is_tradable"`
+	CreatedAt  time.Time   `json:"created_at"`
+	Price      apd.Decimal `json:"price"`
+	Bid        apd.Decimal `json:"bid"`
+	Ask        apd.Decimal `json:"ask"`
+	Spread     apd.Decimal `json:"spread"`
+	Volume     int64       `json:"volume"`
+	PriceAt    time.Time   `json:"price_at,omitempty"`
 }
 
 // ─── Trending ─────────────────────────────────────────────────────────────────
 
 // TrendingStockDTO is used in the trending list response.
 type TrendingStockDTO struct {
-	Symbol   string  `json:"symbol"`
-	Name     string  `json:"name"`
-	Exchange string  `json:"exchange"`
-	Price    float64 `json:"price"`
-	Bid      float64 `json:"bid"`
-	Ask      float64 `json:"ask"`
-	Volume   int64   `json:"volume"`
+	Symbol   string      `json:"symbol"`
+	Name     string      `json:"name"`
+	Exchange string      `json:"exchange"`
+	Price    apd.Decimal `json:"price"`
+	Bid      apd.Decimal `json:"bid"`
+	Ask      apd.Decimal `json:"ask"`
+	Volume   int64       `json:"volume"`
 }
 
 // ─── Price ────────────────────────────────────────────────────────────────────
 
 // PriceResponse is the single-symbol current price response.
 type PriceResponse struct {
-	Symbol    string    `json:"symbol"`
-	Price     float64   `json:"price"`
-	Bid       float64   `json:"bid"`
-	Ask       float64   `json:"ask"`
-	Spread    float64   `json:"spread"`
-	Volume    int64     `json:"volume"`
-	Timestamp time.Time `json:"timestamp"`
+	Symbol    string      `json:"symbol"`
+	Price     apd.Decimal `json:"price"`
+	Bid       apd.Decimal `json:"bid"`
+	Ask       apd.Decimal `json:"ask"`
+	Spread    apd.Decimal `json:"spread"`
+	Volume    int64       `json:"volume"`
+	Timestamp time.Time   `json:"timestamp"`
 }
 
 // PriceHistoryRequest carries query-string filters for price history.
@@ -105,12 +109,12 @@ type GetCandlesRequest struct {
 
 // CandleDTO represents a single OHLCV candle.
 type CandleDTO struct {
-	Timestamp time.Time `json:"timestamp"`
-	Open      float64   `json:"open"`
-	High      float64   `json:"high"`
-	Low       float64   `json:"low"`
-	Close     float64   `json:"close"`
-	Volume    int64     `json:"volume"`
+	Timestamp time.Time   `json:"timestamp"`
+	Open      apd.Decimal `json:"open"`
+	High      apd.Decimal `json:"high"`
+	Low       apd.Decimal `json:"low"`
+	Close     apd.Decimal `json:"close"`
+	Volume    int64       `json:"volume"`
 }
 
 // GetCandlesResponse wraps the candle list.

@@ -2,7 +2,11 @@ package execution
 
 import (
 	"time"
+
+	"github.com/cockroachdb/apd/v3"
 )
+
+var decCtx = apd.BaseContext.WithPrecision(19)
 
 // Trade represents an executed trade between a buyer and seller
 type Trade struct {
@@ -10,7 +14,7 @@ type Trade struct {
 	BuyOrderID  string
 	SellOrderID string
 	Symbol      string
-	Price       float64
+	Price       apd.Decimal
 	Quantity    int
 	BuyerID     string
 	SellerID    string
@@ -20,8 +24,10 @@ type Trade struct {
 }
 
 // TotalValue returns the total value of the trade
-func (t *Trade) TotalValue() float64 {
-	return t.Price * float64(t.Quantity)
+func (t *Trade) TotalValue() apd.Decimal {
+	var result apd.Decimal
+	_, _ = decCtx.Mul(&result, &t.Price, apd.New(int64(t.Quantity), 0))
+	return result
 }
 
 // IsSettled checks if the trade has been settled
@@ -64,7 +70,7 @@ type Settlement struct {
 	SellerAccountID string
 	Symbol          string
 	Quantity        int
-	Amount          float64
+	Amount          apd.Decimal
 	Status          SettlementStatus
 	SettledAt       *time.Time
 	FailureReason   string
@@ -118,7 +124,7 @@ type ClearingInstruction struct {
 	ToAccountID     string
 	AssetType       AssetType
 	AssetSymbol     string
-	Amount          float64
+	Amount          apd.Decimal
 	Quantity        int
 	Status          InstructionStatus
 	ExecutedAt      *time.Time

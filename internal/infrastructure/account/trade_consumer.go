@@ -8,9 +8,13 @@ import (
 	domainAccount "trading-stock/internal/domain/account"
 	infraEvents "trading-stock/internal/infrastructure/events"
 
+	"github.com/cockroachdb/apd/v3"
+
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
 )
+
+var tradeDecCtx = apd.BaseContext.WithPrecision(19)
 
 // TradeConsumer listens to trades.executed and settles funds in the account
 // aggregate for both buyer and seller.
@@ -67,14 +71,15 @@ func (c *TradeConsumer) Run(ctx context.Context) {
 			continue
 		}
 
-		amount := msg.Price * float64(msg.Quantity)
+		amount := apd.Decimal{}
+		_, _ = tradeDecCtx.Mul(&amount, &msg.Price, apd.New(int64(msg.Quantity), 0))
 		c.settle(ctx, msg.TradeID, msg.BuyerID, "BUY", amount)
 		c.settle(ctx, msg.TradeID, msg.SellerID, "SELL", amount)
 	}
 }
 
 // settle resolves the account ID for a user then calls SettleTrade.
-func (c *TradeConsumer) settle(ctx context.Context, tradeID, userID, side string, amount float64) {
+func (c *TradeConsumer) settle(ctx context.Context, tradeID, userID, side string, amount apd.Decimal) {
 	accounts, err := c.readModelRepo.GetByUserID(ctx, userID)
 	if err != nil || len(accounts) == 0 {
 		c.logger.Error("[ AccountTradeConsumer ] account not found for user",
@@ -111,6 +116,6 @@ func (c *TradeConsumer) settle(ctx context.Context, tradeID, userID, side string
 	c.logger.Info(fmt.Sprintf("[ AccountTradeConsumer ] %s settled", side),
 		zap.String("trade_id", tradeID),
 		zap.String("account_id", accountID),
-		zap.Float64("amount", amount),
+		zap.String("amount", amount.String()),
 	)
 }

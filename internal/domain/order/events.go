@@ -1,6 +1,10 @@
 package order
 
-import "time"
+import (
+	"time"
+
+	"github.com/cockroachdb/apd/v3"
+)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DomainEvent — base interface for all events in the Order bounded context.
@@ -10,12 +14,12 @@ import "time"
 type EventType string
 
 const (
-	EventOrderPlaced       EventType = "order.placed"
-	EventOrderCancelled    EventType = "order.cancelled"
-	EventOrderPartialFill  EventType = "order.partial_fill"
-	EventOrderFilled       EventType = "order.filled"
-	EventOrderRejected     EventType = "order.rejected"
-	EventOrderExpired      EventType = "order.expired"
+	EventOrderPlaced      EventType = "order.placed"
+	EventOrderCancelled   EventType = "order.cancelled"
+	EventOrderPartialFill EventType = "order.partial_fill"
+	EventOrderFilled      EventType = "order.filled"
+	EventOrderRejected    EventType = "order.rejected"
+	EventOrderExpired     EventType = "order.expired"
 )
 
 // DomainEvent is the contract every event in this aggregate must satisfy.
@@ -31,15 +35,15 @@ type DomainEvent interface {
 
 // OrderPlacedEvent is emitted when a new order is submitted by a user.
 type OrderPlacedEvent struct {
-	AggregateID string    `json:"aggregate_id"`
-	UserID      string    `json:"user_id"`
-	AccountID   string    `json:"account_id"`
-	Symbol      string    `json:"symbol"`
-	Side        Side      `json:"side"`
-	OrderType   OrderType `json:"order_type"`
-	Quantity    int       `json:"quantity"`
-	Price       float64   `json:"price"`
-	OccurredAt  time.Time `json:"occurred_at"`
+	AggregateID string      `json:"aggregate_id"`
+	UserID      string      `json:"user_id"`
+	AccountID   string      `json:"account_id"`
+	Symbol      string      `json:"symbol"`
+	Side        Side        `json:"side"`
+	OrderType   OrderType   `json:"order_type"`
+	Quantity    int         `json:"quantity"`
+	Price       apd.Decimal `json:"price"`
+	OccurredAt  time.Time   `json:"occurred_at"`
 }
 
 func (e OrderPlacedEvent) GetEventType() EventType  { return EventOrderPlaced }
@@ -58,11 +62,11 @@ func (e OrderCancelledEvent) GetOccurredAt() time.Time { return e.OccurredAt }
 
 // OrderPartialFillEvent is emitted when the matching engine partially executes an order.
 type OrderPartialFillEvent struct {
-	AggregateID   string    `json:"aggregate_id"`
-	FilledQty     int       `json:"filled_qty"`     // quantity filled in THIS trade
-	FillPrice     float64   `json:"fill_price"`     // price of THIS trade
-	TotalFilledQty int      `json:"total_filled_qty"` // cumulative filled quantity
-	OccurredAt    time.Time `json:"occurred_at"`
+	AggregateID    string      `json:"aggregate_id"`
+	FilledQty      int         `json:"filled_qty"`       // quantity filled in THIS trade
+	FillPrice      apd.Decimal `json:"fill_price"`       // price of THIS trade
+	TotalFilledQty int         `json:"total_filled_qty"` // cumulative filled quantity
+	OccurredAt     time.Time   `json:"occurred_at"`
 }
 
 func (e OrderPartialFillEvent) GetEventType() EventType  { return EventOrderPartialFill }
@@ -71,12 +75,12 @@ func (e OrderPartialFillEvent) GetOccurredAt() time.Time { return e.OccurredAt }
 
 // OrderFilledEvent is emitted when the order is completely executed.
 type OrderFilledEvent struct {
-	AggregateID    string    `json:"aggregate_id"`
-	FilledQty      int       `json:"filled_qty"`
-	FillPrice      float64   `json:"fill_price"`
-	TotalFilledQty int       `json:"total_filled_qty"`
-	AvgFillPrice   float64   `json:"avg_fill_price"`
-	OccurredAt     time.Time `json:"occurred_at"`
+	AggregateID    string      `json:"aggregate_id"`
+	FilledQty      int         `json:"filled_qty"`
+	FillPrice      apd.Decimal `json:"fill_price"`
+	TotalFilledQty int         `json:"total_filled_qty"`
+	AvgFillPrice   apd.Decimal `json:"avg_fill_price"`
+	OccurredAt     time.Time   `json:"occurred_at"`
 }
 
 func (e OrderFilledEvent) GetEventType() EventType  { return EventOrderFilled }

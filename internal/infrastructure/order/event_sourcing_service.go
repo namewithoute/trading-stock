@@ -9,6 +9,8 @@ import (
 	domain "trading-stock/internal/domain/order"
 	"trading-stock/internal/infrastructure/outbox"
 
+	"github.com/cockroachdb/apd/v3"
+
 	"github.com/google/uuid"
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
@@ -31,7 +33,7 @@ type OrderAcceptedMessage struct {
 	Symbol     string           `json:"symbol"`
 	Side       domain.Side      `json:"side"`
 	OrderType  domain.OrderType `json:"order_type"`
-	Price      float64          `json:"price"`
+	Price      apd.Decimal      `json:"price"`
 	Quantity   int              `json:"quantity"`
 	OccurredAt time.Time        `json:"occurred_at"`
 }

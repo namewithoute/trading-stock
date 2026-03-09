@@ -128,7 +128,7 @@ func (s *MatchingService) HandleOrderAccepted(ctx context.Context, msg infraOrde
 			s.logger.Info("[ Matching ] trade executed and persisted",
 				zap.String("trade_id", tradeID),
 				zap.String("symbol", t.Symbol),
-				zap.Float64("price", t.Price),
+				zap.String("price", t.Price.String()),
 				zap.Int("quantity", t.Quantity),
 			)
 		}

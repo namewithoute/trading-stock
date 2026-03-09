@@ -2,6 +2,8 @@ package account
 
 import (
 	"trading-stock/internal/domain/account"
+
+	"github.com/cockroachdb/apd/v3"
 )
 
 // AccountListingResponse is the paginated response payload for list endpoints.
@@ -27,19 +29,19 @@ type AccountResponse struct {
 
 // Money is the nested balance structure in AccountResponse.
 type Money struct {
-	Balance     float64 `json:"balance"`
-	BuyingPower float64 `json:"buying_power"`
-	Currency    string  `json:"currency"`
+	Balance     apd.Decimal `json:"balance"`
+	BuyingPower apd.Decimal `json:"buying_power"`
+	Currency    string      `json:"currency"`
 }
 
 // Request DTOs
 
 type DepositRequest struct {
-	Amount float64 `json:"amount" validate:"required,gt=0"`
+	Amount apd.Decimal `json:"amount" validate:"required"`
 }
 
 type WithdrawRequest struct {
-	Amount float64 `json:"amount" validate:"required,gt=0"`
+	Amount apd.Decimal `json:"amount" validate:"required"`
 }
 
 // ToAccountResponse maps a read model (CQRS query side) to the HTTP response DTO.

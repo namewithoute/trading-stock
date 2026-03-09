@@ -1,6 +1,12 @@
 package market
 
-import "time"
+import (
+	"time"
+
+	"github.com/cockroachdb/apd/v3"
+)
+
+var decCtx = apd.BaseContext.WithPrecision(19)
 
 // Stock represents a tradable security/symbol
 type Stock struct {
@@ -26,12 +32,12 @@ type Stock struct {
 type Price struct {
 	ID        string
 	Symbol    string
-	Price     float64
+	Price     apd.Decimal
 	Timestamp time.Time
 
 	// Additional price data
-	Bid    float64
-	Ask    float64
+	Bid    apd.Decimal
+	Ask    apd.Decimal
 	Volume int64
 }
 
@@ -42,10 +48,10 @@ type Candle struct {
 	Interval string // 1m, 5m, 1h, 1d, etc.
 
 	// OHLCV data
-	Open   float64
-	High   float64
-	Low    float64
-	Close  float64
+	Open   apd.Decimal
+	High   apd.Decimal
+	Low    apd.Decimal
+	Close  apd.Decimal
 	Volume int64
 
 	// Timestamp
@@ -62,22 +68,27 @@ type MarketDepth struct {
 
 // PriceLevel represents a single price level in the order book
 type PriceLevel struct {
-	Price    float64 `json:"price"`
-	Quantity int     `json:"quantity"`
+	Price    apd.Decimal `json:"price"`
+	Quantity int         `json:"quantity"`
 }
 
 // Spread returns the bid-ask spread
-func (md *MarketDepth) Spread() float64 {
+func (md *MarketDepth) Spread() apd.Decimal {
 	if len(md.Bids) == 0 || len(md.Asks) == 0 {
-		return 0
+		return apd.Decimal{}
 	}
-	return md.Asks[0].Price - md.Bids[0].Price
+	var spread apd.Decimal
+	_, _ = decCtx.Sub(&spread, &md.Asks[0].Price, &md.Bids[0].Price)
+	return spread
 }
 
 // MidPrice returns the mid price between best bid and ask
-func (md *MarketDepth) MidPrice() float64 {
+func (md *MarketDepth) MidPrice() apd.Decimal {
 	if len(md.Bids) == 0 || len(md.Asks) == 0 {
-		return 0
+		return apd.Decimal{}
 	}
-	return (md.Bids[0].Price + md.Asks[0].Price) / 2
+	var sum, mid apd.Decimal
+	_, _ = decCtx.Add(&sum, &md.Bids[0].Price, &md.Asks[0].Price)
+	_, _ = decCtx.Quo(&mid, &sum, apd.New(2, 0))
+	return mid
 }

@@ -1,6 +1,10 @@
 package account
 
-import "time"
+import (
+	"time"
+
+	"github.com/cockroachdb/apd/v3"
+)
 
 // AccountReadModel is the denormalised, query-optimised view of an account.
 // It lives in the `account_read_models` table and is safely reconstructed
@@ -12,8 +16,8 @@ type AccountReadModel struct {
 	ID          string      `json:"id"`
 	UserID      string      `json:"user_id"`
 	AccountType AccountType `json:"account_type"`
-	Balance     float64     `json:"balance"`
-	BuyingPower float64     `json:"buying_power"`
+	Balance     apd.Decimal `json:"balance"`
+	BuyingPower apd.Decimal `json:"buying_power"`
 	Currency    string      `json:"currency"`
 	Status      Status      `json:"status"`
 

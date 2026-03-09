@@ -1,6 +1,10 @@
 package account
 
-import "time"
+import (
+	"time"
+
+	"github.com/cockroachdb/apd/v3"
+)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AccountAggregate — the write-side (Event Sourcing) representation.
@@ -60,22 +64,22 @@ func (a *AccountAggregate) apply(event DomainEvent, isNew bool) {
 		a.ID = e.AggregateID
 		a.UserID = e.UserID
 		a.AccountType = e.AccountType
-		a.Money = Money{Balance: 0, BuyingPower: 0, Currency: e.Currency}
+		a.Money = Money{Currency: e.Currency} // Balance and BuyingPower zero-valued
 		a.Status = StatusActive
 
 	case MoneyDepositedEvent:
-		a.Money.Balance += e.Amount
-		a.Money.BuyingPower += e.Amount
+		_, _ = decCtx.Add(&a.Money.Balance, &a.Money.Balance, &e.Amount)
+		_, _ = decCtx.Add(&a.Money.BuyingPower, &a.Money.BuyingPower, &e.Amount)
 
 	case MoneyWithdrawnEvent:
-		a.Money.Balance -= e.Amount
-		a.Money.BuyingPower -= e.Amount
+		_, _ = decCtx.Sub(&a.Money.Balance, &a.Money.Balance, &e.Amount)
+		_, _ = decCtx.Sub(&a.Money.BuyingPower, &a.Money.BuyingPower, &e.Amount)
 
 	case FundsReservedEvent:
-		a.Money.BuyingPower -= e.Amount
+		_, _ = decCtx.Sub(&a.Money.BuyingPower, &a.Money.BuyingPower, &e.Amount)
 
 	case FundsReleasedEvent:
-		a.Money.BuyingPower += e.Amount
+		_, _ = decCtx.Add(&a.Money.BuyingPower, &a.Money.BuyingPower, &e.Amount)
 
 	case StatusChangedEvent:
 		a.Status = e.NewStatus
@@ -83,11 +87,11 @@ func (a *AccountAggregate) apply(event DomainEvent, isNew bool) {
 	case TradeSettledEvent:
 		if e.Side == "BUY" {
 			// Funds were already reserved (BuyingPower reduced); now debit the actual balance.
-			a.Money.Balance -= e.Amount
+			_, _ = decCtx.Sub(&a.Money.Balance, &a.Money.Balance, &e.Amount)
 		} else {
 			// SELL settlement: cash received from selling securities.
-			a.Money.Balance += e.Amount
-			a.Money.BuyingPower += e.Amount
+			_, _ = decCtx.Add(&a.Money.Balance, &a.Money.Balance, &e.Amount)
+			_, _ = decCtx.Add(&a.Money.BuyingPower, &a.Money.BuyingPower, &e.Amount)
 		}
 	}
 
@@ -118,12 +122,16 @@ func (a *AccountAggregate) ClearUncommittedEvents() {
 
 // ToReadModel converts current aggregate state to the query-optimised read model.
 func (a *AccountAggregate) ToReadModel() *AccountReadModel {
+	balance := apd.Decimal{}
+	_, _ = decCtx.Add(&balance, &a.Money.Balance, &apd.Decimal{})
+	buyingPower := apd.Decimal{}
+	_, _ = decCtx.Add(&buyingPower, &a.Money.BuyingPower, &apd.Decimal{})
 	return &AccountReadModel{
 		ID:          a.ID,
 		UserID:      a.UserID,
 		AccountType: a.AccountType,
-		Balance:     a.Money.Balance,
-		BuyingPower: a.Money.BuyingPower,
+		Balance:     balance,
+		BuyingPower: buyingPower,
 		Currency:    a.Money.Currency,
 		Status:      a.Status,
 		Version:     a.Version,

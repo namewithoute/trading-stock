@@ -8,6 +8,8 @@ import (
 
 	domain "trading-stock/internal/domain/order"
 
+	"github.com/cockroachdb/apd/v3"
+
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
 )
@@ -182,7 +184,7 @@ func applyDescriptor(d EventDescriptor, rm *domain.OrderReadModel) error {
 		rm.Quantity = e.Quantity
 		rm.Price = e.Price
 		rm.FilledQuantity = 0
-		rm.AvgFillPrice = 0
+		rm.AvgFillPrice = apd.Decimal{}
 		rm.Status = domain.StatusPending
 		rm.CreatedAt = e.OccurredAt
 		rm.UpdatedAt = e.OccurredAt

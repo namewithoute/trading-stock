@@ -5,6 +5,8 @@ import (
 
 	"trading-stock/internal/domain/order"
 	"trading-stock/internal/domain/user"
+
+	"github.com/cockroachdb/apd/v3"
 )
 
 // ApproveKYCRequest is the request body for approving/rejecting KYC.
@@ -48,19 +50,19 @@ func toUserAdminDTO(u user.User) UserAdminDTO {
 
 // OrderAdminDTO is the admin view of an order.
 type OrderAdminDTO struct {
-	ID             string    `json:"id"`
-	UserID         string    `json:"user_id"`
-	AccountID      string    `json:"account_id"`
-	Symbol         string    `json:"symbol"`
-	Side           string    `json:"side"`
-	OrderType      string    `json:"order_type"`
-	Quantity       int       `json:"quantity"`
-	Price          float64   `json:"price"`
-	FilledQuantity int       `json:"filled_quantity"`
-	AvgFillPrice   float64   `json:"avg_fill_price"`
-	Status         string    `json:"status"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID             string      `json:"id"`
+	UserID         string      `json:"user_id"`
+	AccountID      string      `json:"account_id"`
+	Symbol         string      `json:"symbol"`
+	Side           string      `json:"side"`
+	OrderType      string      `json:"order_type"`
+	Quantity       int         `json:"quantity"`
+	Price          apd.Decimal `json:"price"`
+	FilledQuantity int         `json:"filled_quantity"`
+	AvgFillPrice   apd.Decimal `json:"avg_fill_price"`
+	Status         string      `json:"status"`
+	CreatedAt      time.Time   `json:"created_at"`
+	UpdatedAt      time.Time   `json:"updated_at"`
 }
 
 func toOrderAdminDTO(o *order.OrderReadModel) OrderAdminDTO {

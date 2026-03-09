@@ -7,9 +7,13 @@ import (
 	marketUC "trading-stock/internal/application/market"
 	"trading-stock/pkg/response"
 
+	"github.com/cockroachdb/apd/v3"
+
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
 )
+
+var handlerDecCtx = apd.BaseContext.WithPrecision(19)
 
 // MarketHandler handles market data endpoints.
 type MarketHandler struct {
@@ -131,7 +135,9 @@ func (h *MarketHandler) GetStockDetail(c echo.Context) error {
 		resp.Price = r.LatestPrice.Price
 		resp.Bid = r.LatestPrice.Bid
 		resp.Ask = r.LatestPrice.Ask
-		resp.Spread = r.LatestPrice.Ask - r.LatestPrice.Bid
+		var spread apd.Decimal
+		_, _ = handlerDecCtx.Sub(&spread, &r.LatestPrice.Ask, &r.LatestPrice.Bid)
+		resp.Spread = spread
 		resp.Volume = r.LatestPrice.Volume
 		resp.PriceAt = r.LatestPrice.Timestamp
 	}
@@ -154,7 +160,7 @@ func (h *MarketHandler) GetCurrentPrice(c echo.Context) error {
 		Price:     p.Price,
 		Bid:       p.Bid,
 		Ask:       p.Ask,
-		Spread:    p.Ask - p.Bid,
+		Spread:    func() apd.Decimal { var s apd.Decimal; _, _ = handlerDecCtx.Sub(&s, &p.Ask, &p.Bid); return s }(),
 		Volume:    p.Volume,
 		Timestamp: p.Timestamp,
 	})
@@ -197,7 +203,7 @@ func (h *MarketHandler) GetPriceHistory(c echo.Context) error {
 			Price:     p.Price,
 			Bid:       p.Bid,
 			Ask:       p.Ask,
-			Spread:    p.Ask - p.Bid,
+			Spread:    func() apd.Decimal { var s apd.Decimal; _, _ = handlerDecCtx.Sub(&s, &p.Ask, &p.Bid); return s }(),
 			Volume:    p.Volume,
 			Timestamp: p.Timestamp,
 		})
@@ -307,24 +313,35 @@ func (h *MarketHandler) GetPremiumAnalysis(c echo.Context) error {
 	if n < smaWindow {
 		smaWindow = n
 	}
-	sum := 0.0
+	var sum apd.Decimal
 	for i := n - smaWindow; i < n; i++ {
-		sum += candles[i].Close
+		_, _ = handlerDecCtx.Add(&sum, &sum, &candles[i].Close)
 	}
-	sma14 := sum / float64(smaWindow)
+	var sma14 apd.Decimal
+	_, _ = handlerDecCtx.Quo(&sma14, &sum, apd.New(int64(smaWindow), 0))
 
 	// Last close & simple momentum
 	last := candles[n-1]
-	var momentum float64
+	var momentum apd.Decimal
 	if n >= 2 {
-		momentum = (last.Close - candles[n-2].Close) / candles[n-2].Close * 100
+		prevClose := candles[n-2].Close
+		var diff apd.Decimal
+		_, _ = handlerDecCtx.Sub(&diff, &last.Close, &prevClose)
+		if prevClose.Sign() != 0 {
+			var pct apd.Decimal
+			_, _ = handlerDecCtx.Quo(&pct, &diff, &prevClose)
+			_, _ = handlerDecCtx.Mul(&momentum, &pct, apd.New(100, 0))
+		}
 	}
 
 	// Naive recommendation
 	recommendation := "hold"
-	if last.Close > sma14*1.02 {
+	var buyThreshold, sellThreshold apd.Decimal
+	_, _ = handlerDecCtx.Mul(&buyThreshold, &sma14, apd.New(102, -2)) // sma14 * 1.02
+	_, _ = handlerDecCtx.Mul(&sellThreshold, &sma14, apd.New(98, -2)) // sma14 * 0.98
+	if last.Close.Cmp(&buyThreshold) > 0 {
 		recommendation = "buy"
-	} else if last.Close < sma14*0.98 {
+	} else if last.Close.Cmp(&sellThreshold) < 0 {
 		recommendation = "sell"
 	}
 

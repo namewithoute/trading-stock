@@ -7,9 +7,20 @@ import (
 
 	"trading-stock/internal/domain/order"
 
+	"github.com/cockroachdb/apd/v3"
+
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
+
+// mustDecimal parses a numeric string into an apd.Decimal for test convenience.
+func mustDecimal(s string) apd.Decimal {
+	d, _, err := apd.NewFromString(s)
+	if err != nil {
+		panic("mustDecimal: " + err.Error())
+	}
+	return *d
+}
 
 // TestOrderBookBasicOperations tests basic order book operations
 func TestOrderBookBasicOperations(t *testing.T) {
@@ -20,7 +31,7 @@ func TestOrderBookBasicOperations(t *testing.T) {
 		ID:        uuid.New().String(),
 		UserID:    "user1",
 		Symbol:    "AAPL",
-		Price:     150.00,
+		Price:     mustDecimal("150.00"),
 		Quantity:  10,
 		Side:      order.SideBuy,
 		Type:      order.TypeLimit,
@@ -32,7 +43,7 @@ func TestOrderBookBasicOperations(t *testing.T) {
 		ID:        uuid.New().String(),
 		UserID:    "user2",
 		Symbol:    "AAPL",
-		Price:     151.00,
+		Price:     mustDecimal("151.00"),
 		Quantity:  5,
 		Side:      order.SideSell,
 		Type:      order.TypeLimit,
@@ -51,19 +62,22 @@ func TestOrderBookBasicOperations(t *testing.T) {
 
 	// Check best bid and ask
 	bestBid := ob.BestBid()
-	if bestBid == nil || bestBid.Price != 150.00 {
+	expected150 := mustDecimal("150.00")
+	if bestBid == nil || bestBid.Price.Cmp(&expected150) != 0 {
 		t.Errorf("Expected best bid price 150.00, got %v", bestBid)
 	}
 
 	bestAsk := ob.BestAsk()
-	if bestAsk == nil || bestAsk.Price != 151.00 {
+	expected151 := mustDecimal("151.00")
+	if bestAsk == nil || bestAsk.Price.Cmp(&expected151) != 0 {
 		t.Errorf("Expected best ask price 151.00, got %v", bestAsk)
 	}
 
 	// Check spread
 	spread := ob.Spread()
-	if spread != 1.00 {
-		t.Errorf("Expected spread 1.00, got %f", spread)
+	expected1 := mustDecimal("1.00")
+	if spread.Cmp(&expected1) != 0 {
+		t.Errorf("Expected spread 1.00, got %s", spread.String())
 	}
 }
 
@@ -79,7 +93,7 @@ func TestMatchingEngineSimpleMatch(t *testing.T) {
 		ID:        uuid.New().String(),
 		UserID:    "seller1",
 		Symbol:    "AAPL",
-		Price:     150.00,
+		Price:     mustDecimal("150.00"),
 		Quantity:  10,
 		Side:      order.SideSell,
 		Type:      order.TypeLimit,
@@ -101,7 +115,7 @@ func TestMatchingEngineSimpleMatch(t *testing.T) {
 		ID:        uuid.New().String(),
 		UserID:    "buyer1",
 		Symbol:    "AAPL",
-		Price:     150.00,
+		Price:     mustDecimal("150.00"),
 		Quantity:  10,
 		Side:      order.SideBuy,
 		Type:      order.TypeLimit,
@@ -121,8 +135,9 @@ func TestMatchingEngineSimpleMatch(t *testing.T) {
 	}
 
 	trade := trades[0]
-	if trade.Price != 150.00 {
-		t.Errorf("Expected trade price 150.00, got %f", trade.Price)
+	expTrade150 := mustDecimal("150.00")
+	if trade.Price.Cmp(&expTrade150) != 0 {
+		t.Errorf("Expected trade price 150.00, got %s", trade.Price.String())
 	}
 	if trade.Quantity != 10 {
 		t.Errorf("Expected trade quantity 10, got %d", trade.Quantity)
@@ -149,7 +164,7 @@ func TestMatchingEnginePartialFill(t *testing.T) {
 		ID:        uuid.New().String(),
 		UserID:    "seller1",
 		Symbol:    "AAPL",
-		Price:     150.00,
+		Price:     mustDecimal("150.00"),
 		Quantity:  10,
 		Side:      order.SideSell,
 		Type:      order.TypeLimit,
@@ -164,7 +179,7 @@ func TestMatchingEnginePartialFill(t *testing.T) {
 		ID:        uuid.New().String(),
 		UserID:    "buyer1",
 		Symbol:    "AAPL",
-		Price:     150.00,
+		Price:     mustDecimal("150.00"),
 		Quantity:  5, // Only 5 shares
 		Side:      order.SideBuy,
 		Type:      order.TypeLimit,
@@ -213,7 +228,7 @@ func TestPriceTimePriority(t *testing.T) {
 		ID:        uuid.New().String(),
 		UserID:    "seller1",
 		Symbol:    "AAPL",
-		Price:     151.00,
+		Price:     mustDecimal("151.00"),
 		Quantity:  10,
 		Side:      order.SideSell,
 		Type:      order.TypeLimit,
@@ -225,7 +240,7 @@ func TestPriceTimePriority(t *testing.T) {
 		ID:        uuid.New().String(),
 		UserID:    "seller2",
 		Symbol:    "AAPL",
-		Price:     150.00, // Better price
+		Price:     mustDecimal("150.00"), // Better price
 		Quantity:  10,
 		Side:      order.SideSell,
 		Type:      order.TypeLimit,
@@ -241,7 +256,7 @@ func TestPriceTimePriority(t *testing.T) {
 		ID:        uuid.New().String(),
 		UserID:    "buyer1",
 		Symbol:    "AAPL",
-		Price:     151.00,
+		Price:     mustDecimal("151.00"),
 		Quantity:  5,
 		Side:      order.SideBuy,
 		Type:      order.TypeLimit,
@@ -259,8 +274,9 @@ func TestPriceTimePriority(t *testing.T) {
 		t.Fatalf("Expected 1 trade, got %d", len(trades))
 	}
 
-	if trades[0].Price != 150.00 {
-		t.Errorf("Expected trade at better price 150.00, got %f", trades[0].Price)
+	expPTP150 := mustDecimal("150.00")
+	if trades[0].Price.Cmp(&expPTP150) != 0 {
+		t.Errorf("Expected trade at better price 150.00, got %s", trades[0].Price.String())
 	}
 
 	if trades[0].SellOrderID != sellOrder2.ID {
@@ -280,7 +296,7 @@ func TestMarketOrder(t *testing.T) {
 		ID:        uuid.New().String(),
 		UserID:    "seller1",
 		Symbol:    "AAPL",
-		Price:     150.00,
+		Price:     mustDecimal("150.00"),
 		Quantity:  10,
 		Side:      order.SideSell,
 		Type:      order.TypeLimit,
@@ -295,7 +311,7 @@ func TestMarketOrder(t *testing.T) {
 		ID:        uuid.New().String(),
 		UserID:    "buyer1",
 		Symbol:    "AAPL",
-		Price:     0, // Market order
+		Price:     apd.Decimal{}, // Market order
 		Quantity:  10,
 		Side:      order.SideBuy,
 		Type:      order.TypeMarket,
@@ -314,7 +330,8 @@ func TestMarketOrder(t *testing.T) {
 	}
 
 	// Should execute at the sell order price
-	if trades[0].Price != 150.00 {
-		t.Errorf("Expected trade price 150.00, got %f", trades[0].Price)
+	expMkt150 := mustDecimal("150.00")
+	if trades[0].Price.Cmp(&expMkt150) != 0 {
+		t.Errorf("Expected trade price 150.00, got %s", trades[0].Price.String())
 	}
 }

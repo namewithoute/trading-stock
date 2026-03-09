@@ -4,6 +4,8 @@ import (
 	"time"
 
 	domain "trading-stock/internal/domain/market"
+
+	"github.com/cockroachdb/apd/v3"
 )
 
 // StockModel is the GORM persistence model for stocks.
@@ -63,13 +65,13 @@ func (m *StockModel) toDomain() *domain.Stock {
 
 // PriceModel is the GORM persistence model for prices.
 type PriceModel struct {
-	ID        string    `gorm:"primaryKey;type:uuid"`
-	Symbol    string    `gorm:"index;type:varchar(10);not null"`
-	Price     float64   `gorm:"type:decimal(20,4);not null"`
-	Timestamp time.Time `gorm:"index;not null"`
+	ID        string      `gorm:"primaryKey;type:uuid"`
+	Symbol    string      `gorm:"index;type:varchar(10);not null"`
+	Price     apd.Decimal `gorm:"type:decimal(20,4);not null"`
+	Timestamp time.Time   `gorm:"index;not null"`
 
-	Bid    float64 `gorm:"type:decimal(20,4)"`
-	Ask    float64 `gorm:"type:decimal(20,4)"`
+	Bid    apd.Decimal `gorm:"type:decimal(20,4)"`
+	Ask    apd.Decimal `gorm:"type:decimal(20,4)"`
 	Volume int64
 }
 
@@ -111,11 +113,11 @@ type CandleModel struct {
 	Symbol   string `gorm:"index;type:varchar(10);not null"`
 	Interval string `gorm:"type:varchar(10);not null"`
 
-	Open   float64 `gorm:"type:decimal(20,4);not null"`
-	High   float64 `gorm:"type:decimal(20,4);not null"`
-	Low    float64 `gorm:"type:decimal(20,4);not null"`
-	Close  float64 `gorm:"type:decimal(20,4);not null"`
-	Volume int64   `gorm:"not null"`
+	Open   apd.Decimal `gorm:"type:decimal(20,4);not null"`
+	High   apd.Decimal `gorm:"type:decimal(20,4);not null"`
+	Low    apd.Decimal `gorm:"type:decimal(20,4);not null"`
+	Close  apd.Decimal `gorm:"type:decimal(20,4);not null"`
+	Volume int64       `gorm:"not null"`
 
 	Timestamp time.Time `gorm:"index;not null"`
 }

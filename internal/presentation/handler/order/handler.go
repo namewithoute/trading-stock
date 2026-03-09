@@ -38,7 +38,7 @@ func (h *OrderHandler) CreateOrder(c echo.Context) error {
 		})
 	}
 
-	if orderReq.Symbol == "" || orderReq.Price == 0 || orderReq.Quantity == 0 || orderReq.Side == "" || orderReq.Type == "" {
+	if orderReq.Symbol == "" || orderReq.Price.Sign() == 0 || orderReq.Quantity == 0 || orderReq.Side == "" || orderReq.Type == "" {
 		return c.JSON(http.StatusBadRequest, map[string]interface{}{
 			"message": "Invalid request body",
 			"error":   "Invalid request body",
@@ -220,7 +220,7 @@ func (h *OrderHandler) UpdateOrder(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return response.Error(c, http.StatusBadRequest, "Invalid request body", err.Error())
 	}
-	if req.Price <= 0 || req.Quantity <= 0 {
+	if req.Price.Sign() <= 0 || req.Quantity <= 0 {
 		return response.Error(c, http.StatusBadRequest, "Invalid request body", "price and quantity must be greater than 0")
 	}
 

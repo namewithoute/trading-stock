@@ -1,6 +1,10 @@
 package order
 
-import "time"
+import (
+	"time"
+
+	"github.com/cockroachdb/apd/v3"
+)
 
 // Order represents a trading order entity
 // This is the investor's intention to buy or sell a security
@@ -9,14 +13,14 @@ type Order struct {
 	UserID    string
 	AccountID string
 	Symbol    string
-	Price     float64
+	Price     apd.Decimal
 	Quantity  int
 	Side      Side
 	Type      OrderType
 	Status    Status
 
 	FilledQuantity int
-	AvgFillPrice   float64
+	AvgFillPrice   apd.Decimal
 
 	CreatedAt time.Time
 	UpdatedAt time.Time

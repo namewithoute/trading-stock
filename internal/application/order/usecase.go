@@ -7,19 +7,23 @@ import (
 	accountApp "trading-stock/internal/application/account"
 	"trading-stock/internal/domain/order"
 
+	"github.com/cockroachdb/apd/v3"
+
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
+var decCtx = apd.BaseContext.WithPrecision(19)
+
 // UseCase handles order business logic
 type UseCase interface {
-	CreateOrder(ctx context.Context, userID, accountID, symbol, side, orderType string, price float64, quantity int) (*order.OrderReadModel, error)
+	CreateOrder(ctx context.Context, userID, accountID, symbol, side, orderType string, price apd.Decimal, quantity int) (*order.OrderReadModel, error)
 	ListOrders(ctx context.Context, userID, symbol, status string, limit, offset int) ([]*order.OrderReadModel, error)
 	GetOrder(ctx context.Context, id string) (*order.OrderReadModel, error)
 	CancelOrder(ctx context.Context, id string) error
 	// UpdateOrder cancels the existing PENDING order then re-creates it with updated
 	// price / quantity. Caller must verify ownership before invoking.
-	UpdateOrder(ctx context.Context, userID, orderID string, newPrice float64, newQuantity int) (*order.OrderReadModel, error)
+	UpdateOrder(ctx context.Context, userID, orderID string, newPrice apd.Decimal, newQuantity int) (*order.OrderReadModel, error)
 }
 
 type useCase struct {
@@ -45,7 +49,7 @@ func NewUseCase(
 
 // ─── CreateOrder ──────────────────────────────────────────────────────────────
 
-func (s *useCase) CreateOrder(ctx context.Context, userID, accountID, symbol, side, orderType string, price float64, quantity int) (*order.OrderReadModel, error) {
+func (s *useCase) CreateOrder(ctx context.Context, userID, accountID, symbol, side, orderType string, price apd.Decimal, quantity int) (*order.OrderReadModel, error) {
 	// [Business Rule] 1. Resolve primary account if not provided
 	if accountID == "" {
 		acc, err := s.accountSvc.GetPrimaryAccountByUser(ctx, accountApp.GetPrimaryAccountByUserQuery{UserID: userID})
@@ -57,7 +61,8 @@ func (s *useCase) CreateOrder(ctx context.Context, userID, accountID, symbol, si
 
 	// [Business Rule] 2. Reserve funds for BUY orders before placing
 	if order.Side(side) == order.SideBuy {
-		totalCost := float64(quantity) * price
+		var totalCost apd.Decimal
+		_, _ = decCtx.Mul(&totalCost, &price, apd.New(int64(quantity), 0))
 		_, err := s.accountSvc.ReserveFunds(ctx, accountApp.ReserveFundsCommand{
 			AccountID: accountID,
 			Amount:    totalCost,
@@ -67,7 +72,7 @@ func (s *useCase) CreateOrder(ctx context.Context, userID, accountID, symbol, si
 		}
 		s.logger.Info("Funds reserved for BUY order",
 			zap.String("userID", userID),
-			zap.Float64("amount", totalCost),
+			zap.String("amount", totalCost.String()),
 		)
 	}
 
@@ -82,12 +87,15 @@ func (s *useCase) CreateOrder(ctx context.Context, userID, accountID, symbol, si
 		quantity,
 		price,
 	)
+
 	if err != nil {
 		// Rollback reserved funds if aggregate creation fails
 		if order.Side(side) == order.SideBuy {
+			var rollbackAmt apd.Decimal
+			_, _ = decCtx.Mul(&rollbackAmt, &price, apd.New(int64(quantity), 0))
 			_, _ = s.accountSvc.ReleaseFunds(ctx, accountApp.ReleaseFundsCommand{
 				AccountID: accountID,
-				Amount:    float64(quantity) * price,
+				Amount:    rollbackAmt,
 			})
 		}
 		return nil, err
@@ -98,9 +106,11 @@ func (s *useCase) CreateOrder(ctx context.Context, userID, accountID, symbol, si
 		s.logger.Error("Failed to save order events", zap.Error(err))
 		// Rollback reserved funds on persistence failure
 		if order.Side(side) == order.SideBuy {
+			var rollbackAmt apd.Decimal
+			_, _ = decCtx.Mul(&rollbackAmt, &price, apd.New(int64(quantity), 0))
 			_, _ = s.accountSvc.ReleaseFunds(ctx, accountApp.ReleaseFundsCommand{
 				AccountID: accountID,
-				Amount:    float64(quantity) * price,
+				Amount:    rollbackAmt,
 			})
 		}
 		return nil, err
@@ -162,7 +172,8 @@ func (s *useCase) CancelOrder(ctx context.Context, id string) error {
 	if agg.Side == order.SideBuy {
 		remaining := agg.RemainingQuantity()
 		if remaining > 0 {
-			releaseAmount := float64(remaining) * agg.Price
+			var releaseAmount apd.Decimal
+			_, _ = decCtx.Mul(&releaseAmount, &agg.Price, apd.New(int64(remaining), 0))
 			_, releaseErr := s.accountSvc.ReleaseFunds(ctx, accountApp.ReleaseFundsCommand{
 				AccountID: agg.AccountID,
 				Amount:    releaseAmount,
@@ -172,12 +183,12 @@ func (s *useCase) CancelOrder(ctx context.Context, id string) error {
 				s.logger.Error("Failed to release funds after cancel",
 					zap.Error(releaseErr),
 					zap.String("orderID", id),
-					zap.Float64("releaseAmount", releaseAmount),
+					zap.String("releaseAmount", releaseAmount.String()),
 				)
 			} else {
 				s.logger.Info("Funds released after cancel",
 					zap.String("orderID", id),
-					zap.Float64("releaseAmount", releaseAmount),
+					zap.String("releaseAmount", releaseAmount.String()),
 				)
 			}
 		}
@@ -188,7 +199,7 @@ func (s *useCase) CancelOrder(ctx context.Context, id string) error {
 
 // ─── UpdateOrder ──────────────────────────────────────────────────────────────
 
-func (s *useCase) UpdateOrder(ctx context.Context, userID, orderID string, newPrice float64, newQuantity int) (*order.OrderReadModel, error) {
+func (s *useCase) UpdateOrder(ctx context.Context, userID, orderID string, newPrice apd.Decimal, newQuantity int) (*order.OrderReadModel, error) {
 	// 1. Load aggregate to verify ownership + cancellability
 	agg, err := s.orderRepo.Load(ctx, orderID)
 	if err != nil {
@@ -217,7 +228,7 @@ func (s *useCase) UpdateOrder(ctx context.Context, userID, orderID string, newPr
 	s.logger.Info("Order updated (cancel+recreate)",
 		zap.String("oldOrderID", orderID),
 		zap.String("newOrderID", updated.ID),
-		zap.Float64("newPrice", newPrice),
+		zap.String("newPrice", newPrice.String()),
 		zap.Int("newQuantity", newQuantity),
 	)
 	return updated, nil

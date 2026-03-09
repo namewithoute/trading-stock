@@ -9,6 +9,8 @@ import (
 
 	"trading-stock/internal/domain/order"
 
+	"github.com/cockroachdb/apd/v3"
+
 	"go.uber.org/zap"
 )
 
@@ -29,7 +31,7 @@ type OrderUpdate struct {
 	OrderID        string
 	Status         order.Status
 	FilledQuantity int
-	AvgFillPrice   float64
+	AvgFillPrice   apd.Decimal
 	Timestamp      time.Time
 }
 
@@ -174,7 +176,7 @@ func (me *MatchingEngine) matchBuyOrder(ob *OrderBook, buyOrder *order.Order) []
 		// Check if prices match
 		// For limit orders: buy price must be >= sell price
 		// For market orders: always match
-		if buyOrder.Type == order.TypeLimit && buyOrder.Price < bestAsk.Price {
+		if buyOrder.Type == order.TypeLimit && buyOrder.Price.Cmp(&bestAsk.Price) < 0 {
 			break // No more matches possible
 		}
 
@@ -215,7 +217,7 @@ func (me *MatchingEngine) matchBuyOrder(ob *OrderBook, buyOrder *order.Order) []
 		me.logger.Debug("Trade executed",
 			zap.String("trade_id", trade.ID),
 			zap.String("symbol", trade.Symbol),
-			zap.Float64("price", trade.Price),
+			zap.String("price", trade.Price.String()),
 			zap.Int("quantity", trade.Quantity),
 		)
 	}
@@ -233,7 +235,7 @@ func (me *MatchingEngine) matchSellOrder(ob *OrderBook, sellOrder *order.Order) 
 		// Check if prices match
 		// For limit orders: sell price must be <= buy price
 		// For market orders: always match
-		if sellOrder.Type == order.TypeLimit && sellOrder.Price > bestBid.Price {
+		if sellOrder.Type == order.TypeLimit && sellOrder.Price.Cmp(&bestBid.Price) > 0 {
 			break // No more matches possible
 		}
 
@@ -274,7 +276,7 @@ func (me *MatchingEngine) matchSellOrder(ob *OrderBook, sellOrder *order.Order) 
 		me.logger.Debug("Trade executed",
 			zap.String("trade_id", trade.ID),
 			zap.String("symbol", trade.Symbol),
-			zap.Float64("price", trade.Price),
+			zap.String("price", trade.Price.String()),
 			zap.Int("quantity", trade.Quantity),
 		)
 	}
@@ -283,15 +285,19 @@ func (me *MatchingEngine) matchSellOrder(ob *OrderBook, sellOrder *order.Order) 
 }
 
 // updateAvgFillPrice updates the average fill price for an order
-func (me *MatchingEngine) updateAvgFillPrice(o *order.Order, tradePrice float64, tradeQty int) {
+func (me *MatchingEngine) updateAvgFillPrice(o *order.Order, tradePrice apd.Decimal, tradeQty int) {
 	if o.FilledQuantity == tradeQty {
 		// First fill
 		o.AvgFillPrice = tradePrice
 	} else {
-		// Calculate weighted average
-		prevTotal := o.AvgFillPrice * float64(o.FilledQuantity-tradeQty)
-		newTotal := tradePrice * float64(tradeQty)
-		o.AvgFillPrice = (prevTotal + newTotal) / float64(o.FilledQuantity)
+		// Calculate weighted average: (prevAvg * prevQty + tradePrice * tradeQty) / totalQty
+		prevTotal := new(apd.Decimal)
+		_, _ = decCtx.Mul(prevTotal, &o.AvgFillPrice, apd.New(int64(o.FilledQuantity-tradeQty), 0))
+		newTotal := new(apd.Decimal)
+		_, _ = decCtx.Mul(newTotal, &tradePrice, apd.New(int64(tradeQty), 0))
+		sum := new(apd.Decimal)
+		_, _ = decCtx.Add(sum, prevTotal, newTotal)
+		_, _ = decCtx.Quo(&o.AvgFillPrice, sum, apd.New(int64(o.FilledQuantity), 0))
 	}
 }
 

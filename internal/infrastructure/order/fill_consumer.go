@@ -7,6 +7,8 @@ import (
 	domain "trading-stock/internal/domain/order"
 	infraEvents "trading-stock/internal/infrastructure/events"
 
+	"github.com/cockroachdb/apd/v3"
+
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
 )
@@ -62,7 +64,7 @@ func (c *OrderFillConsumer) Run(ctx context.Context) {
 }
 
 // recordFill loads the aggregate, calls RecordFill, then saves.
-func (c *OrderFillConsumer) recordFill(ctx context.Context, orderID string, qty int, price float64) {
+func (c *OrderFillConsumer) recordFill(ctx context.Context, orderID string, qty int, price apd.Decimal) {
 	agg, err := c.repo.Load(ctx, orderID)
 	if err != nil {
 		c.logger.Error("[ OrderFillConsumer ] Load order failed",

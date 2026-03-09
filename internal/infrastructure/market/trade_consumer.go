@@ -125,10 +125,10 @@ func (c *MarketTradeConsumer) handleTrade(ctx context.Context, msg infraEvents.T
 	} else {
 		// Update existing candle
 		existing := candles[len(candles)-1]
-		if msg.Price > existing.High {
+		if msg.Price.Cmp(&existing.High) > 0 {
 			existing.High = msg.Price
 		}
-		if msg.Price < existing.Low {
+		if msg.Price.Cmp(&existing.Low) < 0 {
 			existing.Low = msg.Price
 		}
 		existing.Close = msg.Price
@@ -146,7 +146,7 @@ func (c *MarketTradeConsumer) handleTrade(ctx context.Context, msg infraEvents.T
 
 	c.logger.Debug("[ MarketTradeConsumer ] price + candle updated",
 		zap.String("symbol", msg.Symbol),
-		zap.Float64("price", msg.Price),
+		zap.String("price", msg.Price.String()),
 		zap.Int("qty", msg.Quantity),
 	)
 	return nil

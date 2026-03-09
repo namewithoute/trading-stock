@@ -161,7 +161,7 @@ func (h *AccountHandler) Deposit(c echo.Context) error {
 		return response.Error(c, http.StatusBadRequest, "Invalid request payload", err.Error())
 	}
 
-	if req.Amount <= 0 {
+	if req.Amount.Sign() <= 0 {
 		return response.Error(c, http.StatusBadRequest, "Invalid amount", "Amount must be greater than zero")
 	}
 
@@ -202,7 +202,7 @@ func (h *AccountHandler) Withdraw(c echo.Context) error {
 		return response.Error(c, http.StatusBadRequest, "Invalid request payload", err.Error())
 	}
 
-	if req.Amount <= 0 {
+	if req.Amount.Sign() <= 0 {
 		return response.Error(c, http.StatusBadRequest, "Invalid amount", "Amount must be greater than zero")
 	}
 

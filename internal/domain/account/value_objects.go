@@ -3,7 +3,13 @@ package account
 import (
 	"errors"
 	"fmt"
+
+	"github.com/cockroachdb/apd/v3"
 )
+
+// decCtx is the shared arithmetic context for all Money operations.
+// Precision 19 covers amounts up to 9_999_999_999_999_999.9999 (19 significant digits).
+var decCtx = apd.BaseContext.WithPrecision(19)
 
 // AccountType represents the type of trading account
 type AccountType string
@@ -69,12 +75,12 @@ var (
 )
 
 type Money struct {
-	Balance     float64
-	BuyingPower float64
+	Balance     apd.Decimal
+	BuyingPower apd.Decimal
 	Currency    string
 }
 
-func NewMoney(balance, buyingPower float64, currency string) Money {
+func NewMoney(balance, buyingPower apd.Decimal, currency string) Money {
 	return Money{
 		Balance:     balance,
 		BuyingPower: buyingPower,
@@ -83,13 +89,13 @@ func NewMoney(balance, buyingPower float64, currency string) Money {
 }
 
 func (m Money) IsValid() bool {
-	return m.Balance >= 0 && m.BuyingPower >= 0 && m.Currency != ""
+	return m.Balance.Sign() >= 0 && m.BuyingPower.Sign() >= 0 && m.Currency != ""
 }
 
 func (m Money) StringBalance() string {
-	return fmt.Sprintf("%.2f %s", m.Balance, m.Currency)
+	return fmt.Sprintf("%s %s", m.Balance.String(), m.Currency)
 }
 
 func (m Money) StringBuyingPower() string {
-	return fmt.Sprintf("%.2f %s", m.BuyingPower, m.Currency)
+	return fmt.Sprintf("%s %s", m.BuyingPower.String(), m.Currency)
 }

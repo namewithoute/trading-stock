@@ -7,6 +7,8 @@ import (
 
 	domain "trading-stock/internal/domain/order"
 
+	"github.com/cockroachdb/apd/v3"
+
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -29,20 +31,20 @@ func (OrderEventModel) TableName() string { return "order_events" }
 
 // OrderReadModelDB maps to `order_read_models` — the denormalised query table.
 type OrderReadModelDB struct {
-	ID             string    `gorm:"primaryKey;type:uuid"`
-	UserID         string    `gorm:"type:uuid;index;not null"`
-	AccountID      string    `gorm:"type:uuid;index"`
-	Symbol         string    `gorm:"type:varchar(10);index;not null"`
-	Side           string    `gorm:"type:varchar(10);not null"`
-	OrderType      string    `gorm:"column:order_type;type:varchar(20);not null"`
-	Quantity       int       `gorm:"not null"`
-	Price          float64   `gorm:"type:decimal(20,4);not null"`
-	FilledQuantity int       `gorm:"default:0"`
-	AvgFillPrice   float64   `gorm:"type:decimal(20,4)"`
-	Status         string    `gorm:"type:varchar(20);index;not null"`
-	Version        int       `gorm:"not null;default:0"`
-	CreatedAt      time.Time `gorm:"not null"`
-	UpdatedAt      time.Time `gorm:"not null"`
+	ID             string      `gorm:"primaryKey;type:uuid"`
+	UserID         string      `gorm:"type:uuid;index;not null"`
+	AccountID      string      `gorm:"type:uuid;index"`
+	Symbol         string      `gorm:"type:varchar(10);index;not null"`
+	Side           string      `gorm:"type:varchar(10);not null"`
+	OrderType      string      `gorm:"column:order_type;type:varchar(20);not null"`
+	Quantity       int         `gorm:"not null"`
+	Price          apd.Decimal `gorm:"type:decimal(20,4);not null"`
+	FilledQuantity int         `gorm:"default:0"`
+	AvgFillPrice   apd.Decimal `gorm:"type:decimal(20,4)"`
+	Status         string      `gorm:"type:varchar(20);index;not null"`
+	Version        int         `gorm:"not null;default:0"`
+	CreatedAt      time.Time   `gorm:"not null"`
+	UpdatedAt      time.Time   `gorm:"not null"`
 }
 
 func (OrderReadModelDB) TableName() string { return "order_read_models" }

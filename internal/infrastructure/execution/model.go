@@ -5,20 +5,22 @@ import (
 
 	domain "trading-stock/internal/domain/execution"
 
+	"github.com/cockroachdb/apd/v3"
+
 	"gorm.io/gorm"
 )
 
 // TradeModel is the GORM persistence model for executed trades.
 type TradeModel struct {
-	ID          string  `gorm:"primaryKey;type:uuid"`
-	BuyOrderID  string  `gorm:"type:uuid;index;not null"`
-	SellOrderID string  `gorm:"type:uuid;index;not null"`
-	Symbol      string  `gorm:"type:varchar(10);index;not null"`
-	Price       float64 `gorm:"type:decimal(20,4);not null"`
-	Quantity    int     `gorm:"not null"`
-	BuyerID     string  `gorm:"type:uuid;index;not null"`
-	SellerID    string  `gorm:"type:uuid;index;not null"`
-	Status      string  `gorm:"type:varchar(20);not null"`
+	ID          string      `gorm:"primaryKey;type:uuid"`
+	BuyOrderID  string      `gorm:"type:uuid;index;not null"`
+	SellOrderID string      `gorm:"type:uuid;index;not null"`
+	Symbol      string      `gorm:"type:varchar(10);index;not null"`
+	Price       apd.Decimal `gorm:"type:decimal(20,4);not null"`
+	Quantity    int         `gorm:"not null"`
+	BuyerID     string      `gorm:"type:uuid;index;not null"`
+	SellerID    string      `gorm:"type:uuid;index;not null"`
+	Status      string      `gorm:"type:varchar(20);not null"`
 	SettledAt   *time.Time
 	CreatedAt   time.Time `gorm:"not null"`
 }
@@ -65,14 +67,14 @@ func (m *TradeModel) toDomain() *domain.Trade {
 
 // SettlementModel is the GORM persistence model for settlements.
 type SettlementModel struct {
-	ID              string  `gorm:"primaryKey;type:uuid"`
-	TradeID         string  `gorm:"type:uuid;uniqueIndex;not null"`
-	BuyerAccountID  string  `gorm:"type:uuid;index;not null"`
-	SellerAccountID string  `gorm:"type:uuid;index;not null"`
-	Symbol          string  `gorm:"type:varchar(10);not null"`
-	Quantity        int     `gorm:"not null"`
-	Amount          float64 `gorm:"type:decimal(20,2);not null"`
-	Status          string  `gorm:"type:varchar(20);not null"`
+	ID              string      `gorm:"primaryKey;type:uuid"`
+	TradeID         string      `gorm:"type:uuid;uniqueIndex;not null"`
+	BuyerAccountID  string      `gorm:"type:uuid;index;not null"`
+	SellerAccountID string      `gorm:"type:uuid;index;not null"`
+	Symbol          string      `gorm:"type:varchar(10);not null"`
+	Quantity        int         `gorm:"not null"`
+	Amount          apd.Decimal `gorm:"type:decimal(20,2);not null"`
+	Status          string      `gorm:"type:varchar(20);not null"`
 	SettledAt       *time.Time
 	FailureReason   string    `gorm:"type:text"`
 	CreatedAt       time.Time `gorm:"not null"`
@@ -123,14 +125,14 @@ func (m *SettlementModel) toDomain() *domain.Settlement {
 
 // ClearingInstructionModel is the GORM persistence model for clearing instructions.
 type ClearingInstructionModel struct {
-	ID              string  `gorm:"primaryKey;type:uuid"`
-	TradeID         string  `gorm:"type:uuid;index;not null"`
-	InstructionType string  `gorm:"type:varchar(20);not null"`
-	FromAccountID   string  `gorm:"type:uuid;not null"`
-	ToAccountID     string  `gorm:"type:uuid;not null"`
-	AssetType       string  `gorm:"type:varchar(20);not null"`
-	AssetSymbol     string  `gorm:"type:varchar(10)"`
-	Amount          float64 `gorm:"type:decimal(20,2);not null"`
+	ID              string      `gorm:"primaryKey;type:uuid"`
+	TradeID         string      `gorm:"type:uuid;index;not null"`
+	InstructionType string      `gorm:"type:varchar(20);not null"`
+	FromAccountID   string      `gorm:"type:uuid;not null"`
+	ToAccountID     string      `gorm:"type:uuid;not null"`
+	AssetType       string      `gorm:"type:varchar(20);not null"`
+	AssetSymbol     string      `gorm:"type:varchar(10)"`
+	Amount          apd.Decimal `gorm:"type:decimal(20,2);not null"`
 	Quantity        int
 	Status          string `gorm:"type:varchar(20);not null"`
 	ExecutedAt      *time.Time

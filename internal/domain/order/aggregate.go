@@ -1,6 +1,13 @@
 package order
 
-import "time"
+import (
+	"time"
+
+	"github.com/cockroachdb/apd/v3"
+)
+
+// decCtx is the arithmetic context for order price/fill calculations.
+var decCtx = apd.BaseContext.WithPrecision(19)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // OrderAggregate — the write-side (Event Sourcing) representation.
@@ -23,12 +30,12 @@ type OrderAggregate struct {
 	Side      Side
 	OrderType OrderType
 	Quantity  int
-	Price     float64
+	Price     apd.Decimal
 
 	// ── Fill tracking ─────────────────────────────────────────────────────────
 	FilledQuantity int
-	AvgFillPrice   float64
-	totalFillValue float64 // running sum of (fillQty * fillPrice) for avg calc
+	AvgFillPrice   apd.Decimal
+	totalFillValue apd.Decimal // running sum of (fillQty * fillPrice) for avg calc
 
 	// ── Lifecycle ─────────────────────────────────────────────────────────────
 	Status    Status
@@ -71,8 +78,8 @@ func (a *OrderAggregate) apply(event DomainEvent, isNew bool) {
 		a.Price = e.Price
 		a.Status = StatusPending
 		a.FilledQuantity = 0
-		a.AvgFillPrice = 0
-		a.totalFillValue = 0
+		a.AvgFillPrice = apd.Decimal{}
+		a.totalFillValue = apd.Decimal{}
 		a.CreatedAt = e.OccurredAt
 		a.UpdatedAt = e.OccurredAt
 
@@ -82,8 +89,10 @@ func (a *OrderAggregate) apply(event DomainEvent, isNew bool) {
 
 	case OrderPartialFillEvent:
 		a.FilledQuantity = e.TotalFilledQty
-		a.totalFillValue += float64(e.FilledQty) * e.FillPrice
-		a.AvgFillPrice = a.totalFillValue / float64(a.FilledQuantity)
+		delta := new(apd.Decimal)
+		_, _ = decCtx.Mul(delta, &e.FillPrice, apd.New(int64(e.FilledQty), 0))
+		_, _ = decCtx.Add(&a.totalFillValue, &a.totalFillValue, delta)
+		_, _ = decCtx.Quo(&a.AvgFillPrice, &a.totalFillValue, apd.New(int64(a.FilledQuantity), 0))
 		a.Status = StatusPartiallyFilled
 		a.UpdatedAt = e.OccurredAt
 
@@ -113,7 +122,7 @@ func (a *OrderAggregate) apply(event DomainEvent, isNew bool) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // PlaceOrder is the aggregate constructor: validates and emits OrderPlacedEvent.
-func PlaceOrder(id, userID, accountID, symbol string, side Side, orderType OrderType, quantity int, price float64) (*OrderAggregate, error) {
+func PlaceOrder(id, userID, accountID, symbol string, side Side, orderType OrderType, quantity int, price apd.Decimal) (*OrderAggregate, error) {
 	if userID == "" {
 		return nil, ErrInvalidSide // reuse domain errors; or add ErrInvalidUserID
 	}
@@ -126,7 +135,7 @@ func PlaceOrder(id, userID, accountID, symbol string, side Side, orderType Order
 	if quantity <= 0 {
 		return nil, ErrInvalidOrderType // placeholder; quantity validated here
 	}
-	if price < 0 {
+	if price.Sign() < 0 {
 		return nil, ErrInvalidOrderType
 	}
 
@@ -158,7 +167,7 @@ func (a *OrderAggregate) Cancel() error {
 }
 
 // RecordFill records a (partial or full) execution from the matching engine.
-func (a *OrderAggregate) RecordFill(filledQty int, fillPrice float64) error {
+func (a *OrderAggregate) RecordFill(filledQty int, fillPrice apd.Decimal) error {
 	if a.Status == StatusCancelled || a.Status == StatusFilled {
 		return ErrInvalidStatus
 	}
@@ -167,8 +176,12 @@ func (a *OrderAggregate) RecordFill(filledQty int, fillPrice float64) error {
 	}
 
 	newTotalFilled := a.FilledQuantity + filledQty
-	newTotalValue := a.totalFillValue + float64(filledQty)*fillPrice
-	newAvg := newTotalValue / float64(newTotalFilled)
+	delta := new(apd.Decimal)
+	_, _ = decCtx.Mul(delta, &fillPrice, apd.New(int64(filledQty), 0))
+	newTotalValue := new(apd.Decimal)
+	_, _ = decCtx.Add(newTotalValue, &a.totalFillValue, delta)
+	newAvg := new(apd.Decimal)
+	_, _ = decCtx.Quo(newAvg, newTotalValue, apd.New(int64(newTotalFilled), 0))
 
 	if newTotalFilled >= a.Quantity {
 		// Order completely filled
@@ -177,7 +190,7 @@ func (a *OrderAggregate) RecordFill(filledQty int, fillPrice float64) error {
 			FilledQty:      filledQty,
 			FillPrice:      fillPrice,
 			TotalFilledQty: newTotalFilled,
-			AvgFillPrice:   newAvg,
+			AvgFillPrice:   *newAvg,
 			OccurredAt:     nowUTC(),
 		}, true)
 	} else {

@@ -1,5 +1,7 @@
 package account
 
+import "github.com/cockroachdb/apd/v3"
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Behaviors — Domain operations that validate invariants then emit events.
 //
@@ -42,11 +44,11 @@ func OpenAccount(id, userID string, accountType AccountType, currency string) (*
 // ─── Money operations ─────────────────────────────────────────────────────────
 
 // Deposit adds funds to the account. Emits MoneyDepositedEvent.
-func (a *AccountAggregate) Deposit(amount float64) error {
+func (a *AccountAggregate) Deposit(amount apd.Decimal) error {
 	if a.Status != StatusActive {
 		return ErrAccountNotActive
 	}
-	if amount <= 0 {
+	if amount.Sign() <= 0 {
 		return ErrInvalidAmount
 	}
 
@@ -60,14 +62,14 @@ func (a *AccountAggregate) Deposit(amount float64) error {
 }
 
 // Withdraw removes funds from the account. Emits MoneyWithdrawnEvent.
-func (a *AccountAggregate) Withdraw(amount float64) error {
+func (a *AccountAggregate) Withdraw(amount apd.Decimal) error {
 	if a.Status != StatusActive {
 		return ErrAccountNotActive
 	}
-	if amount <= 0 {
+	if amount.Sign() <= 0 {
 		return ErrInvalidAmount
 	}
-	if a.Money.Balance < amount {
+	if a.Money.Balance.Cmp(&amount) < 0 {
 		return ErrInsufficientBalance
 	}
 
@@ -83,14 +85,14 @@ func (a *AccountAggregate) Withdraw(amount float64) error {
 // ─── Order-related fund management ───────────────────────────────────────────
 
 // ReserveFunds reduces BuyingPower when a buy order is placed. Emits FundsReservedEvent.
-func (a *AccountAggregate) ReserveFunds(amount float64) error {
+func (a *AccountAggregate) ReserveFunds(amount apd.Decimal) error {
 	if a.Status != StatusActive {
 		return ErrAccountNotActive
 	}
-	if amount <= 0 {
+	if amount.Sign() <= 0 {
 		return ErrInvalidAmount
 	}
-	if a.Money.BuyingPower < amount {
+	if a.Money.BuyingPower.Cmp(&amount) < 0 {
 		return ErrInsufficientBuyingPower
 	}
 
@@ -104,8 +106,8 @@ func (a *AccountAggregate) ReserveFunds(amount float64) error {
 
 // ReleaseFunds returns previously reserved BuyingPower (order cancelled / rejected).
 // Emits FundsReleasedEvent.
-func (a *AccountAggregate) ReleaseFunds(amount float64) error {
-	if amount <= 0 {
+func (a *AccountAggregate) ReleaseFunds(amount apd.Decimal) error {
+	if amount.Sign() <= 0 {
 		return ErrInvalidAmount
 	}
 
@@ -126,11 +128,11 @@ func (a *AccountAggregate) ReleaseFunds(amount float64) error {
 // SELL settlement: credits both Balance and BuyingPower (cash received from the sale).
 //
 // Emits TradeSettledEvent.
-func (a *AccountAggregate) SettleTrade(tradeID, side string, amount float64) error {
+func (a *AccountAggregate) SettleTrade(tradeID, side string, amount apd.Decimal) error {
 	if a.Status != StatusActive {
 		return ErrAccountNotActive
 	}
-	if amount <= 0 {
+	if amount.Sign() <= 0 {
 		return ErrInvalidAmount
 	}
 	if side != "BUY" && side != "SELL" {

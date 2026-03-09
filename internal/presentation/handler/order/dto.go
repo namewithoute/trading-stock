@@ -1,17 +1,21 @@
 package order
 
-import "time"
+import (
+	"time"
+
+	"github.com/cockroachdb/apd/v3"
+)
 
 // ─── Create ──────────────────────────────────────────────────────────────────
 
 // CreateOrderRequest is the request body for placing a new order.
 type CreateOrderRequest struct {
-	Symbol    string  `json:"symbol"   validate:"required"`
-	Side      string  `json:"side"     validate:"required,oneof=BUY SELL"`
-	Type      string  `json:"type"     validate:"required,oneof=MARKET LIMIT STOP_LOSS STOP_LIMIT"`
-	Quantity  float64 `json:"quantity" validate:"required,gt=0"`
-	Price     float64 `json:"price"    validate:"required,gt=0"`
-	AccountID string  `json:"account_id"`
+	Symbol    string      `json:"symbol"   validate:"required"`
+	Side      string      `json:"side"     validate:"required,oneof=BUY SELL"`
+	Type      string      `json:"type"     validate:"required,oneof=MARKET LIMIT STOP_LOSS STOP_LIMIT"`
+	Quantity  float64     `json:"quantity" validate:"required,gt=0"`
+	Price     apd.Decimal `json:"price"`
+	AccountID string      `json:"account_id"`
 }
 
 // ─── List ─────────────────────────────────────────────────────────────────────
@@ -34,18 +38,18 @@ type ListOrdersResponse struct {
 
 // GetOrderDetailResponse carries the full order state returned by GET /orders/:id.
 type GetOrderDetailResponse struct {
-	OrderID        string    `json:"order_id"`
-	AccountID      string    `json:"account_id"`
-	Symbol         string    `json:"symbol"`
-	Side           string    `json:"side"`
-	Type           string    `json:"type"`
-	Quantity       int       `json:"quantity"`
-	FilledQuantity int       `json:"filled_quantity"`
-	Price          float64   `json:"price"`
-	AvgFillPrice   float64   `json:"avg_fill_price"`
-	Status         string    `json:"status"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	OrderID        string      `json:"order_id"`
+	AccountID      string      `json:"account_id"`
+	Symbol         string      `json:"symbol"`
+	Side           string      `json:"side"`
+	Type           string      `json:"type"`
+	Quantity       int         `json:"quantity"`
+	FilledQuantity int         `json:"filled_quantity"`
+	Price          apd.Decimal `json:"price"`
+	AvgFillPrice   apd.Decimal `json:"avg_fill_price"`
+	Status         string      `json:"status"`
+	CreatedAt      time.Time   `json:"created_at"`
+	UpdatedAt      time.Time   `json:"updated_at"`
 }
 
 // ─── Update ───────────────────────────────────────────────────────────────────
@@ -53,23 +57,23 @@ type GetOrderDetailResponse struct {
 // UpdateOrderRequest carries fields that can be changed on a PENDING order.
 // In stock trading this is implemented as cancel + recreate internally.
 type UpdateOrderRequest struct {
-	Price    float64 `json:"price"    validate:"required,gt=0"`
-	Quantity int     `json:"quantity" validate:"required,gt=0"`
+	Price    apd.Decimal `json:"price"`
+	Quantity int         `json:"quantity" validate:"required,gt=0"`
 }
 
 // ─── Shared sub-types ─────────────────────────────────────────────────────────
 
 // OrderDTO is a compact order summary used inside list responses.
 type OrderDTO struct {
-	OrderID        string    `json:"order_id"`
-	Symbol         string    `json:"symbol"`
-	Side           string    `json:"side"`
-	Type           string    `json:"type"`
-	Quantity       int       `json:"quantity"`
-	FilledQuantity int       `json:"filled_quantity"`
-	Price          float64   `json:"price"`
-	Status         string    `json:"status"`
-	CreatedAt      time.Time `json:"created_at"`
+	OrderID        string      `json:"order_id"`
+	Symbol         string      `json:"symbol"`
+	Side           string      `json:"side"`
+	Type           string      `json:"type"`
+	Quantity       int         `json:"quantity"`
+	FilledQuantity int         `json:"filled_quantity"`
+	Price          apd.Decimal `json:"price"`
+	Status         string      `json:"status"`
+	CreatedAt      time.Time   `json:"created_at"`
 }
 
 // Pagination carries page metadata returned alongside list responses.
