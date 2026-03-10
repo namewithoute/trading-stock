@@ -58,8 +58,8 @@ func (c *OrderFillConsumer) Run(ctx context.Context) {
 		}
 
 		// Update both sides of the trade
-		c.recordFill(ctx, msg.BuyOrderID, msg.Quantity, msg.Price)
-		c.recordFill(ctx, msg.SellOrderID, msg.Quantity, msg.Price)
+		c.recordFill(ctx, msg.BuyOrderID, msg.Quantity, msg.Price.Decimal)
+		c.recordFill(ctx, msg.SellOrderID, msg.Quantity, msg.Price.Decimal)
 	}
 }
 

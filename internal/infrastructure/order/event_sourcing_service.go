@@ -8,8 +8,7 @@ import (
 
 	domain "trading-stock/internal/domain/order"
 	"trading-stock/internal/infrastructure/outbox"
-
-	"github.com/cockroachdb/apd/v3"
+	pkgdecimal "trading-stock/pkg/decimal"
 
 	"github.com/google/uuid"
 	"github.com/segmentio/kafka-go"
@@ -26,16 +25,16 @@ const KafkaTopicOrdersAccepted = "orders.accepted"
 // OrderAcceptedMessage is the payload written to the outbox for accepted orders.
 // The Matching Engine Consumer deserialises this to drive MatchingEngine.SubmitOrder.
 type OrderAcceptedMessage struct {
-	EventID    string           `json:"event_id"`
-	OrderID    string           `json:"order_id"`
-	UserID     string           `json:"user_id"`
-	AccountID  string           `json:"account_id"`
-	Symbol     string           `json:"symbol"`
-	Side       domain.Side      `json:"side"`
-	OrderType  domain.OrderType `json:"order_type"`
-	Price      apd.Decimal      `json:"price"`
-	Quantity   int              `json:"quantity"`
-	OccurredAt time.Time        `json:"occurred_at"`
+	EventID    string             `json:"event_id"`
+	OrderID    string             `json:"order_id"`
+	UserID     string             `json:"user_id"`
+	AccountID  string             `json:"account_id"`
+	Symbol     string             `json:"symbol"`
+	Side       domain.Side        `json:"side"`
+	OrderType  domain.OrderType   `json:"order_type"`
+	Price      pkgdecimal.Decimal `json:"price"`
+	Quantity   int                `json:"quantity"`
+	OccurredAt time.Time          `json:"occurred_at"`
 }
 
 // EventSourcingService implements domain.Repository.
@@ -196,7 +195,7 @@ func (s *EventSourcingService) insertOutboxEntries(tx *gorm.DB, events []domain.
 			Symbol:     placed.Symbol,
 			Side:       placed.Side,
 			OrderType:  placed.OrderType,
-			Price:      placed.Price.Decimal,
+			Price:      pkgdecimal.From(placed.Price.Decimal),
 			Quantity:   placed.Quantity,
 			OccurredAt: placed.OccurredAt,
 		}

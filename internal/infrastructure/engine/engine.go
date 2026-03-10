@@ -14,16 +14,29 @@ import (
 	"go.uber.org/zap"
 )
 
-// MatchingEngine is the core order matching engine
-// It matches buy and sell orders using price-time priority algorithm
-type MatchingEngine struct {
-	orderBooks map[string]*OrderBook // symbol -> OrderBook
-	mu         sync.RWMutex
-	logger     *zap.Logger
+// SubmitRequest is the message sent to a per-symbol goroutine.
+type SubmitRequest struct {
+	Order  *order.Order
+	Result chan<- SubmitResult
+}
 
-	// Event channels for publishing trades and order updates
-	tradeChannel       chan *Trade
-	orderUpdateChannel chan *OrderUpdate
+// CancelRequest asks a symbol goroutine to remove an order from its book.
+type CancelRequest struct {
+	OrderID string
+	Side    order.Side
+	Result  chan<- error
+}
+
+// symbolMessage is the union type routed to each symbol goroutine.
+type symbolMessage struct {
+	submit *SubmitRequest
+	cancel *CancelRequest
+}
+
+// SubmitResult carries the outcome of a SubmitRequest back to the caller.
+type SubmitResult struct {
+	Trades []*Trade
+	Err    error
 }
 
 // OrderUpdate represents an order status update
@@ -40,9 +53,28 @@ type MatchingEngineConfig struct {
 	Logger            *zap.Logger
 	TradeChannelSize  int
 	UpdateChannelSize int
+	SymbolChannelSize int // per-symbol channel buffer (default 500)
 }
 
-// NewMatchingEngine creates a new matching engine
+// MatchingEngine runs one goroutine per symbol.
+// Orders are routed to the correct goroutine via per-symbol channels,
+// so each OrderBook is accessed by exactly one goroutine (no locks needed).
+type MatchingEngine struct {
+	channels map[string]chan symbolMessage // symbol → channel
+	mu       sync.RWMutex                  // protects channels map only
+	logger   *zap.Logger
+
+	symbolChanSize int
+	cancel         context.CancelFunc
+	wg             sync.WaitGroup
+
+	// Event channels for publishing trades and order updates
+	tradeChannel       chan *Trade
+	orderUpdateChannel chan *OrderUpdate
+}
+
+// NewMatchingEngine creates a new matching engine.
+// Call RegisterSymbols() to start per-symbol goroutines, then use Submit/Cancel.
 func NewMatchingEngine(config MatchingEngineConfig) *MatchingEngine {
 	if config.TradeChannelSize == 0 {
 		config.TradeChannelSize = 1000
@@ -50,53 +82,158 @@ func NewMatchingEngine(config MatchingEngineConfig) *MatchingEngine {
 	if config.UpdateChannelSize == 0 {
 		config.UpdateChannelSize = 1000
 	}
+	if config.SymbolChannelSize == 0 {
+		config.SymbolChannelSize = 500
+	}
 
 	return &MatchingEngine{
-		orderBooks:         make(map[string]*OrderBook),
+		channels:           make(map[string]chan symbolMessage),
 		logger:             config.Logger,
+		symbolChanSize:     config.SymbolChannelSize,
 		tradeChannel:       make(chan *Trade, config.TradeChannelSize),
 		orderUpdateChannel: make(chan *OrderUpdate, config.UpdateChannelSize),
 	}
 }
 
-// GetOrCreateOrderBook gets or creates an order book for a symbol
-func (me *MatchingEngine) GetOrCreateOrderBook(symbol string) *OrderBook {
+// RegisterSymbols starts one goroutine per symbol. Must be called once at startup.
+func (me *MatchingEngine) RegisterSymbols(ctx context.Context, symbols []string) {
+	ctx, me.cancel = context.WithCancel(ctx)
+
 	me.mu.Lock()
 	defer me.mu.Unlock()
 
-	if ob, exists := me.orderBooks[symbol]; exists {
-		return ob
-	}
+	for _, sym := range symbols {
+		if _, exists := me.channels[sym]; exists {
+			continue
+		}
+		ch := make(chan symbolMessage, me.symbolChanSize)
+		me.channels[sym] = ch
 
-	ob := NewOrderBook(symbol)
-	me.orderBooks[symbol] = ob
-	me.logger.Info("Created new order book", zap.String("symbol", symbol))
-	return ob
+		ob := NewOrderBook(sym)
+		me.wg.Add(1)
+		go me.symbolLoop(ctx, sym, ob, ch)
+	}
+	me.logger.Info("[ MatchingEngine ] registered symbol goroutines",
+		zap.Int("count", len(symbols)),
+	)
 }
 
-// GetOrderBook gets an order book for a symbol
-func (me *MatchingEngine) GetOrderBook(symbol string) (*OrderBook, error) {
+// EnsureSymbol dynamically registers a symbol if not yet known (hot path guard).
+func (me *MatchingEngine) EnsureSymbol(ctx context.Context, symbol string) {
 	me.mu.RLock()
-	defer me.mu.RUnlock()
-
-	ob, exists := me.orderBooks[symbol]
-	if !exists {
-		return nil, fmt.Errorf("order book not found for symbol: %s", symbol)
+	_, exists := me.channels[symbol]
+	me.mu.RUnlock()
+	if exists {
+		return
 	}
-	return ob, nil
+
+	me.mu.Lock()
+	defer me.mu.Unlock()
+	// double-check
+	if _, exists := me.channels[symbol]; exists {
+		return
+	}
+	ch := make(chan symbolMessage, me.symbolChanSize)
+	me.channels[symbol] = ch
+	ob := NewOrderBook(symbol)
+	me.wg.Add(1)
+	go me.symbolLoop(ctx, symbol, ob, ch)
+	me.logger.Info("[ MatchingEngine ] dynamically registered symbol", zap.String("symbol", symbol))
 }
 
-// SubmitOrder submits an order to the matching engine
-// Returns list of trades generated and any error
+// Stop cancels all symbol goroutines and waits for them to drain.
+func (me *MatchingEngine) Stop() {
+	if me.cancel != nil {
+		me.cancel()
+	}
+	me.wg.Wait()
+}
+
+// SubmitOrder sends an order to the correct symbol goroutine and waits for the result.
 func (me *MatchingEngine) SubmitOrder(ctx context.Context, o *order.Order) ([]*Trade, error) {
 	if o == nil {
 		return nil, fmt.Errorf("order cannot be nil")
 	}
 
-	// Get or create order book for this symbol
-	ob := me.GetOrCreateOrderBook(o.Symbol)
+	ch, err := me.channelFor(o.Symbol)
+	if err != nil {
+		return nil, err
+	}
 
-	// Match the order
+	resCh := make(chan SubmitResult, 1)
+	select {
+	case ch <- symbolMessage{submit: &SubmitRequest{Order: o, Result: resCh}}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
+	select {
+	case res := <-resCh:
+		return res.Trades, res.Err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// CancelOrder sends a cancel request to the correct symbol goroutine.
+func (me *MatchingEngine) CancelOrder(ctx context.Context, orderID string, symbol string, side order.Side) error {
+	ch, err := me.channelFor(symbol)
+	if err != nil {
+		return err
+	}
+
+	resCh := make(chan error, 1)
+	select {
+	case ch <- symbolMessage{cancel: &CancelRequest{OrderID: orderID, Side: side, Result: resCh}}:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	select {
+	case err := <-resCh:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// channelFor returns the channel for a given symbol.
+func (me *MatchingEngine) channelFor(symbol string) (chan symbolMessage, error) {
+	me.mu.RLock()
+	ch, ok := me.channels[symbol]
+	me.mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("no order book registered for symbol: %s", symbol)
+	}
+	return ch, nil
+}
+
+// ── per-symbol goroutine ──────────────────────────────────────────────────────
+
+func (me *MatchingEngine) symbolLoop(ctx context.Context, symbol string, ob *OrderBook, ch <-chan symbolMessage) {
+	defer me.wg.Done()
+	me.logger.Info("[ MatchingEngine ] symbol goroutine started", zap.String("symbol", symbol))
+
+	for {
+		select {
+		case <-ctx.Done():
+			me.logger.Info("[ MatchingEngine ] symbol goroutine stopped", zap.String("symbol", symbol))
+			return
+		case msg := <-ch:
+			if msg.submit != nil {
+				trades, err := me.processOrder(ob, msg.submit.Order)
+				msg.submit.Result <- SubmitResult{Trades: trades, Err: err}
+			}
+			if msg.cancel != nil {
+				err := ob.RemoveOrder(msg.cancel.OrderID, msg.cancel.Side)
+				msg.cancel.Result <- err
+			}
+		}
+	}
+}
+
+// processOrder matches an order, updates statuses, publishes events — all single-threaded.
+func (me *MatchingEngine) processOrder(ob *OrderBook, o *order.Order) ([]*Trade, error) {
 	trades, err := me.matchOrder(ob, o)
 	if err != nil {
 		me.logger.Error("Failed to match order",
@@ -104,6 +241,11 @@ func (me *MatchingEngine) SubmitOrder(ctx context.Context, o *order.Order) ([]*T
 			zap.Error(err),
 		)
 		return nil, err
+	}
+
+	// Publish all trades
+	for _, trade := range trades {
+		me.publishTrade(trade)
 	}
 
 	// If order is not fully filled, add remaining to order book
@@ -116,20 +258,16 @@ func (me *MatchingEngine) SubmitOrder(ctx context.Context, o *order.Order) ([]*T
 			return trades, err
 		}
 
-		// Update order status
 		if len(trades) > 0 {
 			o.Status = order.StatusPartiallyFilled
 		} else {
 			o.Status = order.StatusPending
 		}
-
 		me.publishOrderUpdate(o)
 	} else if o.RemainingQuantity() == 0 {
-		// Order fully filled
 		o.Status = order.StatusFilled
 		me.publishOrderUpdate(o)
 	} else if o.Type == order.TypeMarket && o.RemainingQuantity() > 0 {
-		// Market order not fully filled - reject remaining
 		o.Status = order.StatusPartiallyFilled
 		me.publishOrderUpdate(o)
 	}
@@ -149,18 +287,11 @@ func (me *MatchingEngine) matchOrder(ob *OrderBook, incomingOrder *order.Order) 
 	trades := make([]*Trade, 0)
 
 	if incomingOrder.Side == order.SideBuy {
-		// Match buy order against sell orders (asks)
 		trades = me.matchBuyOrder(ob, incomingOrder)
 	} else if incomingOrder.Side == order.SideSell {
-		// Match sell order against buy orders (bids)
 		trades = me.matchSellOrder(ob, incomingOrder)
 	} else {
 		return nil, fmt.Errorf("invalid order side: %s", incomingOrder.Side)
-	}
-
-	// Publish all trades
-	for _, trade := range trades {
-		me.publishTrade(trade)
 	}
 
 	return trades, nil
@@ -173,18 +304,13 @@ func (me *MatchingEngine) matchBuyOrder(ob *OrderBook, buyOrder *order.Order) []
 	for buyOrder.RemainingQuantity() > 0 && ob.Asks.Len() > 0 {
 		bestAsk := (*ob.Asks)[0]
 
-		// Check if prices match
-		// For limit orders: buy price must be >= sell price
-		// For market orders: always match
 		if buyOrder.Type == order.TypeLimit && buyOrder.Price.Cmp(&bestAsk.Price) < 0 {
-			break // No more matches possible
+			break
 		}
 
-		// Calculate trade quantity (minimum of remaining quantities)
 		tradeQty := min(buyOrder.RemainingQuantity(), bestAsk.RemainingQuantity())
-		tradePrice := bestAsk.Price // Price of the resting order (maker)
+		tradePrice := bestAsk.Price
 
-		// Create trade
 		trade := NewTrade(
 			buyOrder.ID,
 			bestAsk.ID,
@@ -196,15 +322,12 @@ func (me *MatchingEngine) matchBuyOrder(ob *OrderBook, buyOrder *order.Order) []
 		)
 		trades = append(trades, trade)
 
-		// Update orders
 		buyOrder.FilledQuantity += tradeQty
 		bestAsk.FilledQuantity += tradeQty
 
-		// Update average fill prices
 		me.updateAvgFillPrice(buyOrder, tradePrice, tradeQty)
 		me.updateAvgFillPrice(bestAsk, tradePrice, tradeQty)
 
-		// If sell order is fully filled, remove from book
 		if bestAsk.RemainingQuantity() == 0 {
 			heap.Pop(ob.Asks)
 			bestAsk.Status = order.StatusFilled
@@ -232,18 +355,13 @@ func (me *MatchingEngine) matchSellOrder(ob *OrderBook, sellOrder *order.Order) 
 	for sellOrder.RemainingQuantity() > 0 && ob.Bids.Len() > 0 {
 		bestBid := (*ob.Bids)[0]
 
-		// Check if prices match
-		// For limit orders: sell price must be <= buy price
-		// For market orders: always match
 		if sellOrder.Type == order.TypeLimit && sellOrder.Price.Cmp(&bestBid.Price) > 0 {
-			break // No more matches possible
+			break
 		}
 
-		// Calculate trade quantity
 		tradeQty := min(sellOrder.RemainingQuantity(), bestBid.RemainingQuantity())
-		tradePrice := bestBid.Price // Price of the resting order (maker)
+		tradePrice := bestBid.Price
 
-		// Create trade
 		trade := NewTrade(
 			bestBid.ID,
 			sellOrder.ID,
@@ -255,15 +373,12 @@ func (me *MatchingEngine) matchSellOrder(ob *OrderBook, sellOrder *order.Order) 
 		)
 		trades = append(trades, trade)
 
-		// Update orders
 		sellOrder.FilledQuantity += tradeQty
 		bestBid.FilledQuantity += tradeQty
 
-		// Update average fill prices
 		me.updateAvgFillPrice(sellOrder, tradePrice, tradeQty)
 		me.updateAvgFillPrice(bestBid, tradePrice, tradeQty)
 
-		// If buy order is fully filled, remove from book
 		if bestBid.RemainingQuantity() == 0 {
 			heap.Pop(ob.Bids)
 			bestBid.Status = order.StatusFilled
@@ -287,10 +402,8 @@ func (me *MatchingEngine) matchSellOrder(ob *OrderBook, sellOrder *order.Order) 
 // updateAvgFillPrice updates the average fill price for an order
 func (me *MatchingEngine) updateAvgFillPrice(o *order.Order, tradePrice apd.Decimal, tradeQty int) {
 	if o.FilledQuantity == tradeQty {
-		// First fill
 		o.AvgFillPrice = tradePrice
 	} else {
-		// Calculate weighted average: (prevAvg * prevQty + tradePrice * tradeQty) / totalQty
 		prevTotal := new(apd.Decimal)
 		_, _ = decCtx.Mul(prevTotal, &o.AvgFillPrice, apd.New(int64(o.FilledQuantity-tradeQty), 0))
 		newTotal := new(apd.Decimal)
@@ -301,30 +414,10 @@ func (me *MatchingEngine) updateAvgFillPrice(o *order.Order, tradePrice apd.Deci
 	}
 }
 
-// CancelOrder cancels an order
-func (me *MatchingEngine) CancelOrder(ctx context.Context, orderID string, symbol string, side order.Side) error {
-	ob, err := me.GetOrderBook(symbol)
-	if err != nil {
-		return err
-	}
-
-	if err := ob.RemoveOrder(orderID, side); err != nil {
-		return fmt.Errorf("failed to remove order: %w", err)
-	}
-
-	me.logger.Info("Order cancelled",
-		zap.String("order_id", orderID),
-		zap.String("symbol", symbol),
-	)
-
-	return nil
-}
-
 // publishTrade publishes a trade to the trade channel
 func (me *MatchingEngine) publishTrade(trade *Trade) {
 	select {
 	case me.tradeChannel <- trade:
-		// Trade published successfully
 	default:
 		me.logger.Warn("Trade channel full, dropping trade",
 			zap.String("trade_id", trade.ID),
@@ -344,7 +437,6 @@ func (me *MatchingEngine) publishOrderUpdate(o *order.Order) {
 
 	select {
 	case me.orderUpdateChannel <- update:
-		// Update published successfully
 	default:
 		me.logger.Warn("Order update channel full, dropping update",
 			zap.String("order_id", o.ID),
@@ -352,40 +444,18 @@ func (me *MatchingEngine) publishOrderUpdate(o *order.Order) {
 	}
 }
 
-// GetTradeChannel returns the trade channel for consuming trades
-func (me *MatchingEngine) GetTradeChannel() <-chan *Trade {
+// TradeChannel returns the read-only trade event channel.
+func (me *MatchingEngine) TradeChannel() <-chan *Trade {
 	return me.tradeChannel
 }
 
-// GetOrderUpdateChannel returns the order update channel
-func (me *MatchingEngine) GetOrderUpdateChannel() <-chan *OrderUpdate {
+// OrderUpdateChannel returns the read-only order update event channel.
+func (me *MatchingEngine) OrderUpdateChannel() <-chan *OrderUpdate {
 	return me.orderUpdateChannel
 }
 
-// GetAllOrderBooks returns all order books
-func (me *MatchingEngine) GetAllOrderBooks() map[string]*OrderBook {
-	me.mu.RLock()
-	defer me.mu.RUnlock()
-
-	// Return a copy to prevent external modification
-	books := make(map[string]*OrderBook, len(me.orderBooks))
-	for symbol, ob := range me.orderBooks {
-		books[symbol] = ob
-	}
-	return books
-}
-
-// Close closes the matching engine and all channels
-func (me *MatchingEngine) Close() {
-	close(me.tradeChannel)
-	close(me.orderUpdateChannel)
-	me.logger.Info("Matching engine closed")
-}
-
-// Helper function
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
+// GetOrCreateOrderBook is kept for backward compatibility (tests).
+// In production the symbol goroutine owns the book; this creates a detached copy.
+func (me *MatchingEngine) GetOrCreateOrderBook(symbol string) *OrderBook {
+	return NewOrderBook(symbol)
 }

@@ -13,6 +13,7 @@ import (
 	infraExecution "trading-stock/internal/infrastructure/execution"
 	infraOrder "trading-stock/internal/infrastructure/order"
 	infraOutbox "trading-stock/internal/infrastructure/outbox"
+	pkgdecimal "trading-stock/pkg/decimal"
 
 	"github.com/google/uuid"
 	"github.com/segmentio/kafka-go"
@@ -55,7 +56,7 @@ func (s *MatchingService) HandleOrderAccepted(ctx context.Context, msg infraOrde
 		Symbol:    msg.Symbol,
 		Side:      msg.Side,
 		Type:      msg.OrderType,
-		Price:     msg.Price,
+		Price:     msg.Price.Decimal,
 		Quantity:  msg.Quantity,
 		Status:    domainOrder.StatusPending,
 		CreatedAt: msg.OccurredAt,
@@ -108,7 +109,7 @@ func (s *MatchingService) HandleOrderAccepted(ctx context.Context, msg infraOrde
 				EventID:     uuid.New().String(),
 				TradeID:     tradeID,
 				Symbol:      t.Symbol,
-				Price:       t.Price,
+				Price:       pkgdecimal.From(t.Price),
 				Quantity:    t.Quantity,
 				BuyOrderID:  t.BuyOrderID,
 				SellOrderID: t.SellOrderID,
@@ -144,6 +145,7 @@ type MatchingConsumer struct {
 	service *MatchingService
 	reader  *kafka.Reader
 	logger  *zap.Logger
+	seen    map[string]bool // tracks symbols already registered (single-goroutine, no lock needed)
 }
 
 // NewMatchingConsumer constructs the consumer.
@@ -155,7 +157,7 @@ func NewMatchingConsumer(brokers []string, service *MatchingService, logger *zap
 		MinBytes: 1,
 		MaxBytes: 1 << 20, // 1 MB
 	})
-	return &MatchingConsumer{service: service, reader: reader, logger: logger}
+	return &MatchingConsumer{service: service, reader: reader, logger: logger, seen: make(map[string]bool)}
 }
 
 // Run consumes messages until ctx is cancelled.
@@ -183,6 +185,12 @@ func (c *MatchingConsumer) Run(ctx context.Context) {
 				zap.ByteString("value", m.Value),
 			)
 			continue
+		}
+
+		// Ensure symbol goroutine exists — zero-cost after first message per symbol
+		if !c.seen[msg.Symbol] {
+			c.service.engine.EnsureSymbol(ctx, msg.Symbol)
+			c.seen[msg.Symbol] = true
 		}
 
 		if err := c.service.HandleOrderAccepted(ctx, msg); err != nil {

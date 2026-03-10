@@ -22,6 +22,16 @@ func mustDecimal(s string) apd.Decimal {
 	return *d
 }
 
+// newTestEngine creates a MatchingEngine with the given symbols registered.
+func newTestEngine(symbols ...string) (*MatchingEngine, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(context.Background())
+	eng := NewMatchingEngine(MatchingEngineConfig{
+		Logger: zap.NewNop(),
+	})
+	eng.RegisterSymbols(ctx, symbols)
+	return eng, cancel
+}
+
 // TestOrderBookBasicOperations tests basic order book operations
 func TestOrderBookBasicOperations(t *testing.T) {
 	ob := NewOrderBook("AAPL")
@@ -83,10 +93,8 @@ func TestOrderBookBasicOperations(t *testing.T) {
 
 // TestMatchingEngineSimpleMatch tests a simple order match
 func TestMatchingEngineSimpleMatch(t *testing.T) {
-	logger := zap.NewNop()
-	engine := NewMatchingEngine(MatchingEngineConfig{
-		Logger: logger,
-	})
+	engine, cancel := newTestEngine("AAPL")
+	defer cancel()
 
 	// Create a sell order first (resting order)
 	sellOrder := &order.Order{
@@ -154,10 +162,8 @@ func TestMatchingEngineSimpleMatch(t *testing.T) {
 
 // TestMatchingEnginePartialFill tests partial order filling
 func TestMatchingEnginePartialFill(t *testing.T) {
-	logger := zap.NewNop()
-	engine := NewMatchingEngine(MatchingEngineConfig{
-		Logger: logger,
-	})
+	engine, cancel := newTestEngine("AAPL")
+	defer cancel()
 
 	// Create a sell order (resting)
 	sellOrder := &order.Order{
@@ -218,10 +224,8 @@ func TestMatchingEnginePartialFill(t *testing.T) {
 
 // TestPriceTimePriority tests price-time priority matching
 func TestPriceTimePriority(t *testing.T) {
-	logger := zap.NewNop()
-	engine := NewMatchingEngine(MatchingEngineConfig{
-		Logger: logger,
-	})
+	engine, cancel := newTestEngine("AAPL")
+	defer cancel()
 
 	// Add multiple sell orders at different prices
 	sellOrder1 := &order.Order{
@@ -286,10 +290,8 @@ func TestPriceTimePriority(t *testing.T) {
 
 // TestMarketOrder tests market order execution
 func TestMarketOrder(t *testing.T) {
-	logger := zap.NewNop()
-	engine := NewMatchingEngine(MatchingEngineConfig{
-		Logger: logger,
-	})
+	engine, cancel := newTestEngine("AAPL")
+	defer cancel()
 
 	// Add sell order
 	sellOrder := &order.Order{

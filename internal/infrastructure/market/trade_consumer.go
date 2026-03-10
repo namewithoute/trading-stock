@@ -86,7 +86,7 @@ func (c *MarketTradeConsumer) handleTrade(ctx context.Context, msg infraEvents.T
 	price := &domainMarket.Price{
 		ID:        uuid.New().String(),
 		Symbol:    msg.Symbol,
-		Price:     msg.Price,
+		Price:     msg.Price.Decimal,
 		Volume:    int64(msg.Quantity),
 		Timestamp: now,
 	}
@@ -112,10 +112,10 @@ func (c *MarketTradeConsumer) handleTrade(ctx context.Context, msg infraEvents.T
 			ID:        uuid.New().String(),
 			Symbol:    msg.Symbol,
 			Interval:  interval,
-			Open:      msg.Price,
-			High:      msg.Price,
-			Low:       msg.Price,
-			Close:     msg.Price,
+			Open:      msg.Price.Decimal,
+			High:      msg.Price.Decimal,
+			Low:       msg.Price.Decimal,
+			Close:     msg.Price.Decimal,
 			Volume:    int64(msg.Quantity),
 			Timestamp: minuteStart,
 		}
@@ -125,13 +125,13 @@ func (c *MarketTradeConsumer) handleTrade(ctx context.Context, msg infraEvents.T
 	} else {
 		// Update existing candle
 		existing := candles[len(candles)-1]
-		if msg.Price.Cmp(&existing.High) > 0 {
-			existing.High = msg.Price
+		if msg.Price.Decimal.Cmp(&existing.High) > 0 {
+			existing.High = msg.Price.Decimal
 		}
-		if msg.Price.Cmp(&existing.Low) < 0 {
-			existing.Low = msg.Price
+		if msg.Price.Decimal.Cmp(&existing.Low) < 0 {
+			existing.Low = msg.Price.Decimal
 		}
-		existing.Close = msg.Price
+		existing.Close = msg.Price.Decimal
 		existing.Volume += int64(msg.Quantity)
 
 		// Repository doesn't expose Update; re-create via BatchCreate with the updated record
@@ -146,7 +146,7 @@ func (c *MarketTradeConsumer) handleTrade(ctx context.Context, msg infraEvents.T
 
 	c.logger.Debug("[ MarketTradeConsumer ] price + candle updated",
 		zap.String("symbol", msg.Symbol),
-		zap.String("price", msg.Price.String()),
+		zap.String("price", msg.Price.Decimal.String()),
 		zap.Int("qty", msg.Quantity),
 	)
 	return nil

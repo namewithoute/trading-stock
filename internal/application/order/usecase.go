@@ -116,11 +116,9 @@ func (s *useCase) CreateOrder(ctx context.Context, userID, accountID, symbol, si
 		return nil, err
 	}
 
-	// 5. Synchronously upsert read model ("read your own writes" guarantee)
+	// 5. Return read model built from aggregate state.
+	// The persistent read model will be updated asynchronously by the Kafka projector.
 	rm := agg.ToReadModel()
-	if err := s.readRepo.Upsert(ctx, rm); err != nil {
-		s.logger.Error("Failed to upsert order read model (non-fatal)", zap.Error(err))
-	}
 
 	s.logger.Info("Order created",
 		zap.String("orderID", agg.ID),
@@ -162,13 +160,8 @@ func (s *useCase) CancelOrder(ctx context.Context, id string) error {
 		return fmt.Errorf("failed to persist cancel event: %w", err)
 	}
 
-	// 4. Update read model synchronously
-	rm := agg.ToReadModel()
-	if err := s.readRepo.Upsert(ctx, rm); err != nil {
-		s.logger.Error("Failed to upsert order read model after cancel (non-fatal)", zap.Error(err))
-	}
-
-	// 5. Release reserved funds for BUY orders (unfilled quantity only)
+	// 4. Release reserved funds for BUY orders (unfilled quantity only)
+	// Read model will be updated asynchronously by the Kafka projector.
 	if agg.Side == order.SideBuy {
 		remaining := agg.RemainingQuantity()
 		if remaining > 0 {

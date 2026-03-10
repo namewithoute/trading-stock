@@ -12,6 +12,7 @@ import (
 	infraMatching "trading-stock/internal/infrastructure/matching"
 	infraOrder "trading-stock/internal/infrastructure/order"
 	infraOutbox "trading-stock/internal/infrastructure/outbox"
+	infraPortfolio "trading-stock/internal/infrastructure/portfolio"
 	"trading-stock/internal/presentation/handler"
 	"trading-stock/pkg/jwtservice"
 	"trading-stock/pkg/logger"
@@ -65,6 +66,9 @@ type App struct {
 
 	// Market data: consumes trades.executed → updates price + candle tables
 	MarketTradeConsumer *infraMarket.MarketTradeConsumer
+
+	// Portfolio: consumes trades.executed → updates stock positions
+	PortfolioTradeConsumer *infraPortfolio.TradeConsumer
 
 	// Single cancel for all background goroutines
 	workerCancel context.CancelFunc

@@ -8,6 +8,7 @@ import (
 	infraMatching "trading-stock/internal/infrastructure/matching"
 	infraOrder "trading-stock/internal/infrastructure/order"
 	infraOutbox "trading-stock/internal/infrastructure/outbox"
+	infraPortfolio "trading-stock/internal/infrastructure/portfolio"
 	infraUser "trading-stock/internal/infrastructure/user"
 	"trading-stock/internal/presentation/handler"
 	"trading-stock/internal/presentation/router"
@@ -117,6 +118,14 @@ func (a *App) wire() error {
 		a.Logger,
 	)
 	a.Logger.Info("[ Infrastructure ] Account trade consumer initialised")
+
+	// ── 1k. Portfolio trade consumer ───────────────────────────────────
+	a.PortfolioTradeConsumer = infraPortfolio.NewTradeConsumer(
+		a.Config.Kafka.Brokers,
+		a.Repositories.Portfolio,
+		a.Logger,
+	)
+	a.Logger.Info("[ Infrastructure ] Portfolio trade consumer initialised")
 
 	// ── 1j. Market data consumer ───────────────────────────────────────
 	a.MarketTradeConsumer = infraMarket.NewMarketTradeConsumer(

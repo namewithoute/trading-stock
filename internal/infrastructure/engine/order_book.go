@@ -4,20 +4,19 @@ import (
 	"container/heap"
 	"fmt"
 	"sort"
-	"sync"
 
 	"trading-stock/internal/domain/order"
 
 	"github.com/cockroachdb/apd/v3"
 )
 
-// OrderBook manages buy and sell orders for a specific symbol
-// Uses priority queues for efficient order matching
+// OrderBook manages buy and sell orders for a specific symbol.
+// Thread-safety is guaranteed by the per-symbol goroutine in MatchingEngine;
+// no mutex is needed here.
 type OrderBook struct {
 	Symbol string
 	Bids   *BidQueue // Buy orders (max heap - highest price first)
 	Asks   *AskQueue // Sell orders (min heap - lowest price first)
-	mu     sync.RWMutex
 }
 
 // NewOrderBook creates a new order book for a symbol
@@ -36,9 +35,6 @@ func NewOrderBook(symbol string) *OrderBook {
 
 // AddOrder adds an order to the appropriate side of the order book
 func (ob *OrderBook) AddOrder(o *order.Order) error {
-	ob.mu.Lock()
-	defer ob.mu.Unlock()
-
 	if o.Symbol != ob.Symbol {
 		return fmt.Errorf("order symbol %s does not match order book symbol %s", o.Symbol, ob.Symbol)
 	}
@@ -56,9 +52,6 @@ func (ob *OrderBook) AddOrder(o *order.Order) error {
 
 // RemoveOrder removes an order from the order book
 func (ob *OrderBook) RemoveOrder(orderID string, side order.Side) error {
-	ob.mu.Lock()
-	defer ob.mu.Unlock()
-
 	if side == order.SideBuy {
 		return ob.removeFromBids(orderID)
 	} else if side == order.SideSell {
@@ -92,9 +85,6 @@ func (ob *OrderBook) removeFromAsks(orderID string) error {
 
 // BestBid returns the highest buy order
 func (ob *OrderBook) BestBid() *order.Order {
-	ob.mu.RLock()
-	defer ob.mu.RUnlock()
-
 	if ob.Bids.Len() == 0 {
 		return nil
 	}
@@ -103,9 +93,6 @@ func (ob *OrderBook) BestBid() *order.Order {
 
 // BestAsk returns the lowest sell order
 func (ob *OrderBook) BestAsk() *order.Order {
-	ob.mu.RLock()
-	defer ob.mu.RUnlock()
-
 	if ob.Asks.Len() == 0 {
 		return nil
 	}
@@ -114,9 +101,6 @@ func (ob *OrderBook) BestAsk() *order.Order {
 
 // Spread returns the difference between best ask and best bid
 func (ob *OrderBook) Spread() apd.Decimal {
-	ob.mu.RLock()
-	defer ob.mu.RUnlock()
-
 	bestBid := ob.BestBid()
 	bestAsk := ob.BestAsk()
 
@@ -131,9 +115,6 @@ func (ob *OrderBook) Spread() apd.Decimal {
 
 // MidPrice returns the mid price between best bid and ask
 func (ob *OrderBook) MidPrice() apd.Decimal {
-	ob.mu.RLock()
-	defer ob.mu.RUnlock()
-
 	bestBid := ob.BestBid()
 	bestAsk := ob.BestAsk()
 
@@ -156,9 +137,6 @@ type DepthLevel struct {
 
 // GetBidDepth returns aggregated bid depth
 func (ob *OrderBook) GetBidDepth(levels int) []DepthLevel {
-	ob.mu.RLock()
-	defer ob.mu.RUnlock()
-
 	depthMap := make(map[string]*DepthLevel)
 
 	for _, o := range *ob.Bids {
@@ -193,9 +171,6 @@ func (ob *OrderBook) GetBidDepth(levels int) []DepthLevel {
 
 // GetAskDepth returns aggregated ask depth
 func (ob *OrderBook) GetAskDepth(levels int) []DepthLevel {
-	ob.mu.RLock()
-	defer ob.mu.RUnlock()
-
 	depthMap := make(map[string]*DepthLevel)
 
 	for _, o := range *ob.Asks {
@@ -241,9 +216,6 @@ type OrderBookStats struct {
 
 // GetStats returns order book statistics
 func (ob *OrderBook) GetStats() OrderBookStats {
-	ob.mu.RLock()
-	defer ob.mu.RUnlock()
-
 	stats := OrderBookStats{
 		Symbol:   ob.Symbol,
 		BidCount: ob.Bids.Len(),
@@ -268,9 +240,6 @@ func (ob *OrderBook) GetStats() OrderBookStats {
 
 // Clear removes all orders from the order book
 func (ob *OrderBook) Clear() {
-	ob.mu.Lock()
-	defer ob.mu.Unlock()
-
 	ob.Bids = &BidQueue{}
 	ob.Asks = &AskQueue{}
 	heap.Init(ob.Bids)

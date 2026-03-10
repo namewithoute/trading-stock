@@ -49,7 +49,7 @@ func NewUseCase(
 	logger *zap.Logger,
 ) UseCase {
 	return &useCase{
-		CommandHandler: newCommandHandler(repo, readRepo, logger),
+		CommandHandler: newCommandHandler(repo, logger),
 		QueryHandler:   newQueryHandler(readRepo, logger),
 	}
 }

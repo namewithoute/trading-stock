@@ -15,8 +15,8 @@ import (
 // Pattern per command:
 //  1. Load aggregate via domain.Repository (implementation-agnostic)
 //  2. Run the domain behavior (validates invariants, emits domain events)
-//  3. Save aggregate (infrastructure persists uncommitted events)
-//  4. Upsert read model synchronously → "read your own writes" guarantee
+//  3. Save aggregate (persists events to EventStore + publishes to Kafka)
+//  4. Read model is rebuilt asynchronously by the Kafka projector
 // ─────────────────────────────────────────────────────────────────────────────
 
 // CommandHandler defines all write operations for the account domain.
@@ -32,29 +32,22 @@ type CommandHandler interface {
 }
 
 type commandHandler struct {
-	repo     domain.Repository          // load & save aggregates
-	readRepo domain.ReadModelRepository // synchronous read-model upsert
-	logger   *zap.Logger
+	repo   domain.Repository // load & save aggregates
+	logger *zap.Logger
 }
 
-func newCommandHandler(repo domain.Repository, readRepo domain.ReadModelRepository, logger *zap.Logger) CommandHandler {
-	return &commandHandler{repo: repo, readRepo: readRepo, logger: logger}
+func newCommandHandler(repo domain.Repository, logger *zap.Logger) CommandHandler {
+	return &commandHandler{repo: repo, logger: logger}
 }
 
-// saveAndProject saves the aggregate then synchronously upserts the read model.
+// saveAndProject saves the aggregate and returns the read model built from
+// aggregate state. The persistent read model is updated asynchronously by the
+// Kafka projector.
 func (h *commandHandler) saveAndProject(ctx context.Context, agg *domain.AccountAggregate) (*domain.AccountReadModel, error) {
 	if err := h.repo.Save(ctx, agg); err != nil {
 		return nil, err
 	}
-	rm := agg.ToReadModel()
-	if err := h.readRepo.Upsert(ctx, rm); err != nil {
-		// Non-fatal: the event store has the truth. Log and continue.
-		h.logger.Error("Failed to upsert read model after command",
-			zap.String("accountID", agg.ID),
-			zap.Error(err),
-		)
-	}
-	return rm, nil
+	return agg.ToReadModel(), nil
 }
 
 // ─── Command implementations ──────────────────────────────────────────────────

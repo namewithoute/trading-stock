@@ -72,7 +72,7 @@ func (c *TradeConsumer) Run(ctx context.Context) {
 		}
 
 		amount := apd.Decimal{}
-		_, _ = tradeDecCtx.Mul(&amount, &msg.Price, apd.New(int64(msg.Quantity), 0))
+		_, _ = tradeDecCtx.Mul(&amount, &msg.Price.Decimal, apd.New(int64(msg.Quantity), 0))
 		c.settle(ctx, msg.TradeID, msg.BuyerID, "BUY", amount)
 		c.settle(ctx, msg.TradeID, msg.SellerID, "SELL", amount)
 	}

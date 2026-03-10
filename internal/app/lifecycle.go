@@ -81,6 +81,13 @@ func (a *App) Run() error {
 		}()
 	}
 
+	// ── Portfolio Trade Consumer ─────────────────────────────────────
+	if a.PortfolioTradeConsumer != nil {
+		go func() {
+			a.PortfolioTradeConsumer.Run(workerCtx)
+		}()
+	}
+
 	// ── 2. Start HTTP server ───────────────────────────────────────────
 	errChan := make(chan error, 1)
 	go func() {

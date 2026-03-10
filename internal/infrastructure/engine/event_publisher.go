@@ -89,8 +89,8 @@ func (ep *EventPublisher) PublishOrderUpdate(ctx context.Context, update *OrderU
 
 // StartEventConsumer starts consuming events from matching engine and publishes to Kafka
 func (ep *EventPublisher) StartEventConsumer(ctx context.Context, engine *MatchingEngine) {
-	go ep.consumeTrades(ctx, engine.GetTradeChannel())
-	go ep.consumeOrderUpdates(ctx, engine.GetOrderUpdateChannel())
+	go ep.consumeTrades(ctx, engine.TradeChannel())
+	go ep.consumeOrderUpdates(ctx, engine.OrderUpdateChannel())
 	ep.logger.Info("Event consumer started")
 }
 
