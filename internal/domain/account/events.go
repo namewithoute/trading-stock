@@ -3,7 +3,7 @@ package account
 import (
 	"time"
 
-	"github.com/cockroachdb/apd/v3"
+	pkgdecimal "trading-stock/pkg/decimal"
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -49,10 +49,10 @@ func (e AccountCreatedEvent) GetOccurredAt() time.Time { return e.OccurredAt }
 
 // MoneyDepositedEvent is emitted when funds are added to an account.
 type MoneyDepositedEvent struct {
-	AggregateID string      `json:"aggregate_id"`
-	Amount      apd.Decimal `json:"amount"`
-	Currency    string      `json:"currency"`
-	OccurredAt  time.Time   `json:"occurred_at"`
+	AggregateID string             `json:"aggregate_id"`
+	Amount      pkgdecimal.Decimal `json:"amount"`
+	Currency    string             `json:"currency"`
+	OccurredAt  time.Time          `json:"occurred_at"`
 }
 
 func (e MoneyDepositedEvent) GetEventType() EventType  { return EventMoneyDeposited }
@@ -61,10 +61,10 @@ func (e MoneyDepositedEvent) GetOccurredAt() time.Time { return e.OccurredAt }
 
 // MoneyWithdrawnEvent is emitted when funds are removed from an account.
 type MoneyWithdrawnEvent struct {
-	AggregateID string      `json:"aggregate_id"`
-	Amount      apd.Decimal `json:"amount"`
-	Currency    string      `json:"currency"`
-	OccurredAt  time.Time   `json:"occurred_at"`
+	AggregateID string             `json:"aggregate_id"`
+	Amount      pkgdecimal.Decimal `json:"amount"`
+	Currency    string             `json:"currency"`
+	OccurredAt  time.Time          `json:"occurred_at"`
 }
 
 func (e MoneyWithdrawnEvent) GetEventType() EventType  { return EventMoneyWithdrawn }
@@ -73,9 +73,9 @@ func (e MoneyWithdrawnEvent) GetOccurredAt() time.Time { return e.OccurredAt }
 
 // FundsReservedEvent is emitted when buying power is reduced for a pending order.
 type FundsReservedEvent struct {
-	AggregateID string      `json:"aggregate_id"`
-	Amount      apd.Decimal `json:"amount"`
-	OccurredAt  time.Time   `json:"occurred_at"`
+	AggregateID string             `json:"aggregate_id"`
+	Amount      pkgdecimal.Decimal `json:"amount"`
+	OccurredAt  time.Time          `json:"occurred_at"`
 }
 
 func (e FundsReservedEvent) GetEventType() EventType  { return EventFundsReserved }
@@ -84,9 +84,9 @@ func (e FundsReservedEvent) GetOccurredAt() time.Time { return e.OccurredAt }
 
 // FundsReleasedEvent is emitted when reserved buying power is returned (order cancelled).
 type FundsReleasedEvent struct {
-	AggregateID string      `json:"aggregate_id"`
-	Amount      apd.Decimal `json:"amount"`
-	OccurredAt  time.Time   `json:"occurred_at"`
+	AggregateID string             `json:"aggregate_id"`
+	Amount      pkgdecimal.Decimal `json:"amount"`
+	OccurredAt  time.Time          `json:"occurred_at"`
 }
 
 func (e FundsReleasedEvent) GetEventType() EventType  { return EventFundsReleased }
@@ -109,11 +109,11 @@ func (e StatusChangedEvent) GetOccurredAt() time.Time { return e.OccurredAt }
 // For BUY side: Balance decreases by the settlement amount (funds transferred).
 // For SELL side: Balance and BuyingPower increase by the settlement amount (cash received).
 type TradeSettledEvent struct {
-	AggregateID string      `json:"aggregate_id"`
-	TradeID     string      `json:"trade_id"`
-	Side        string      `json:"side"`   // "BUY" or "SELL"
-	Amount      apd.Decimal `json:"amount"` // settlement amount = price * quantity
-	OccurredAt  time.Time   `json:"occurred_at"`
+	AggregateID string             `json:"aggregate_id"`
+	TradeID     string             `json:"trade_id"`
+	Side        string             `json:"side"`   // "BUY" or "SELL"
+	Amount      pkgdecimal.Decimal `json:"amount"` // settlement amount = price * quantity
+	OccurredAt  time.Time          `json:"occurred_at"`
 }
 
 func (e TradeSettledEvent) GetEventType() EventType  { return EventTradeSettled }

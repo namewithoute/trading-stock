@@ -167,7 +167,7 @@ func (h *AccountHandler) Deposit(c echo.Context) error {
 
 	acc, err := h.accountUseCase.Deposit(c.Request().Context(), accountUC.DepositCommand{
 		AccountID: accountID,
-		Amount:    req.Amount,
+		Amount:    req.Amount.Decimal,
 	})
 	if err != nil {
 		h.logger.Error("Failed to deposit to account", zap.Error(err), zap.String("accountID", accountID))
@@ -208,7 +208,7 @@ func (h *AccountHandler) Withdraw(c echo.Context) error {
 
 	acc, err := h.accountUseCase.Withdraw(c.Request().Context(), accountUC.WithdrawCommand{
 		AccountID: accountID,
-		Amount:    req.Amount,
+		Amount:    req.Amount.Decimal,
 	})
 	if err != nil {
 		h.logger.Error("Failed to withdraw from account", zap.Error(err), zap.String("accountID", accountID))

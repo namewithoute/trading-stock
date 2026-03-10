@@ -1,6 +1,9 @@
 package account
 
-import "github.com/cockroachdb/apd/v3"
+import (
+	"github.com/cockroachdb/apd/v3"
+	pkgdecimal "trading-stock/pkg/decimal"
+)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Behaviors — Domain operations that validate invariants then emit events.
@@ -54,7 +57,7 @@ func (a *AccountAggregate) Deposit(amount apd.Decimal) error {
 
 	a.apply(MoneyDepositedEvent{
 		AggregateID: a.ID,
-		Amount:      amount,
+		Amount:      pkgdecimal.From(amount),
 		Currency:    a.Money.Currency,
 		OccurredAt:  nowUTC(),
 	}, true)
@@ -75,7 +78,7 @@ func (a *AccountAggregate) Withdraw(amount apd.Decimal) error {
 
 	a.apply(MoneyWithdrawnEvent{
 		AggregateID: a.ID,
-		Amount:      amount,
+		Amount:      pkgdecimal.From(amount),
 		Currency:    a.Money.Currency,
 		OccurredAt:  nowUTC(),
 	}, true)
@@ -98,7 +101,7 @@ func (a *AccountAggregate) ReserveFunds(amount apd.Decimal) error {
 
 	a.apply(FundsReservedEvent{
 		AggregateID: a.ID,
-		Amount:      amount,
+		Amount:      pkgdecimal.From(amount),
 		OccurredAt:  nowUTC(),
 	}, true)
 	return nil
@@ -113,7 +116,7 @@ func (a *AccountAggregate) ReleaseFunds(amount apd.Decimal) error {
 
 	a.apply(FundsReleasedEvent{
 		AggregateID: a.ID,
-		Amount:      amount,
+		Amount:      pkgdecimal.From(amount),
 		OccurredAt:  nowUTC(),
 	}, true)
 	return nil
@@ -143,7 +146,7 @@ func (a *AccountAggregate) SettleTrade(tradeID, side string, amount apd.Decimal)
 		AggregateID: a.ID,
 		TradeID:     tradeID,
 		Side:        side,
-		Amount:      amount,
+		Amount:      pkgdecimal.From(amount),
 		OccurredAt:  nowUTC(),
 	}, true)
 	return nil

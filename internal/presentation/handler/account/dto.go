@@ -2,8 +2,7 @@ package account
 
 import (
 	"trading-stock/internal/domain/account"
-
-	"github.com/cockroachdb/apd/v3"
+	pkgdecimal "trading-stock/pkg/decimal"
 )
 
 // AccountListingResponse is the paginated response payload for list endpoints.
@@ -29,19 +28,19 @@ type AccountResponse struct {
 
 // Money is the nested balance structure in AccountResponse.
 type Money struct {
-	Balance     apd.Decimal `json:"balance"`
-	BuyingPower apd.Decimal `json:"buying_power"`
-	Currency    string      `json:"currency"`
+	Balance     pkgdecimal.Decimal `json:"balance"`
+	BuyingPower pkgdecimal.Decimal `json:"buying_power"`
+	Currency    string             `json:"currency"`
 }
 
 // Request DTOs
 
 type DepositRequest struct {
-	Amount apd.Decimal `json:"amount" validate:"required"`
+	Amount pkgdecimal.Decimal `json:"amount" validate:"required"`
 }
 
 type WithdrawRequest struct {
-	Amount apd.Decimal `json:"amount" validate:"required"`
+	Amount pkgdecimal.Decimal `json:"amount" validate:"required"`
 }
 
 // ToAccountResponse maps a read model (CQRS query side) to the HTTP response DTO.
@@ -50,8 +49,8 @@ func ToAccountResponse(rm *account.AccountReadModel) *AccountResponse {
 		ID:          rm.ID,
 		AccountType: rm.AccountType,
 		Money: Money{
-			Balance:     rm.Balance,
-			BuyingPower: rm.BuyingPower,
+			Balance:     pkgdecimal.From(rm.Balance),
+			BuyingPower: pkgdecimal.From(rm.BuyingPower),
 			Currency:    rm.Currency,
 		},
 		Status: rm.Status,

@@ -182,7 +182,7 @@ func applyDescriptor(d EventDescriptor, rm *domain.OrderReadModel) error {
 		rm.Side = e.Side
 		rm.OrderType = e.OrderType
 		rm.Quantity = e.Quantity
-		rm.Price = e.Price
+		rm.Price = e.Price.Decimal
 		rm.FilledQuantity = 0
 		rm.AvgFillPrice = apd.Decimal{}
 		rm.Status = domain.StatusPending
@@ -208,7 +208,7 @@ func applyDescriptor(d EventDescriptor, rm *domain.OrderReadModel) error {
 			return err
 		}
 		rm.FilledQuantity = e.TotalFilledQty
-		rm.AvgFillPrice = e.AvgFillPrice
+		rm.AvgFillPrice = e.AvgFillPrice.Decimal
 		rm.Status = domain.StatusFilled
 		rm.UpdatedAt = e.OccurredAt
 

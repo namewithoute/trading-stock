@@ -68,18 +68,18 @@ func (a *AccountAggregate) apply(event DomainEvent, isNew bool) {
 		a.Status = StatusActive
 
 	case MoneyDepositedEvent:
-		_, _ = decCtx.Add(&a.Money.Balance, &a.Money.Balance, &e.Amount)
-		_, _ = decCtx.Add(&a.Money.BuyingPower, &a.Money.BuyingPower, &e.Amount)
+		_, _ = decCtx.Add(&a.Money.Balance, &a.Money.Balance, &e.Amount.Decimal)
+		_, _ = decCtx.Add(&a.Money.BuyingPower, &a.Money.BuyingPower, &e.Amount.Decimal)
 
 	case MoneyWithdrawnEvent:
-		_, _ = decCtx.Sub(&a.Money.Balance, &a.Money.Balance, &e.Amount)
-		_, _ = decCtx.Sub(&a.Money.BuyingPower, &a.Money.BuyingPower, &e.Amount)
+		_, _ = decCtx.Sub(&a.Money.Balance, &a.Money.Balance, &e.Amount.Decimal)
+		_, _ = decCtx.Sub(&a.Money.BuyingPower, &a.Money.BuyingPower, &e.Amount.Decimal)
 
 	case FundsReservedEvent:
-		_, _ = decCtx.Sub(&a.Money.BuyingPower, &a.Money.BuyingPower, &e.Amount)
+		_, _ = decCtx.Sub(&a.Money.BuyingPower, &a.Money.BuyingPower, &e.Amount.Decimal)
 
 	case FundsReleasedEvent:
-		_, _ = decCtx.Add(&a.Money.BuyingPower, &a.Money.BuyingPower, &e.Amount)
+		_, _ = decCtx.Add(&a.Money.BuyingPower, &a.Money.BuyingPower, &e.Amount.Decimal)
 
 	case StatusChangedEvent:
 		a.Status = e.NewStatus
@@ -87,11 +87,11 @@ func (a *AccountAggregate) apply(event DomainEvent, isNew bool) {
 	case TradeSettledEvent:
 		if e.Side == "BUY" {
 			// Funds were already reserved (BuyingPower reduced); now debit the actual balance.
-			_, _ = decCtx.Sub(&a.Money.Balance, &a.Money.Balance, &e.Amount)
+			_, _ = decCtx.Sub(&a.Money.Balance, &a.Money.Balance, &e.Amount.Decimal)
 		} else {
 			// SELL settlement: cash received from selling securities.
-			_, _ = decCtx.Add(&a.Money.Balance, &a.Money.Balance, &e.Amount)
-			_, _ = decCtx.Add(&a.Money.BuyingPower, &a.Money.BuyingPower, &e.Amount)
+			_, _ = decCtx.Add(&a.Money.Balance, &a.Money.Balance, &e.Amount.Decimal)
+			_, _ = decCtx.Add(&a.Money.BuyingPower, &a.Money.BuyingPower, &e.Amount.Decimal)
 		}
 	}
 

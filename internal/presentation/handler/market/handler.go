@@ -5,6 +5,7 @@ import (
 	"time"
 
 	marketUC "trading-stock/internal/application/market"
+	pkgdecimal "trading-stock/pkg/decimal"
 	"trading-stock/pkg/response"
 
 	"github.com/cockroachdb/apd/v3"
@@ -49,9 +50,9 @@ func (h *MarketHandler) GetTrendingStocks(c echo.Context) error {
 			Exchange: r.Stock.Exchange,
 		}
 		if r.LatestPrice != nil {
-			dto.Price = r.LatestPrice.Price
-			dto.Bid = r.LatestPrice.Bid
-			dto.Ask = r.LatestPrice.Ask
+			dto.Price = pkgdecimal.From(r.LatestPrice.Price)
+			dto.Bid = pkgdecimal.From(r.LatestPrice.Bid)
+			dto.Ask = pkgdecimal.From(r.LatestPrice.Ask)
 			dto.Volume = r.LatestPrice.Volume
 		}
 		dtos = append(dtos, dto)
@@ -92,9 +93,9 @@ func (h *MarketHandler) ListStocks(c echo.Context) error {
 			IsTradable: r.Stock.IsTradable,
 		}
 		if r.LatestPrice != nil {
-			dto.Price = r.LatestPrice.Price
-			dto.Bid = r.LatestPrice.Bid
-			dto.Ask = r.LatestPrice.Ask
+			dto.Price = pkgdecimal.From(r.LatestPrice.Price)
+			dto.Bid = pkgdecimal.From(r.LatestPrice.Bid)
+			dto.Ask = pkgdecimal.From(r.LatestPrice.Ask)
 			dto.Volume = r.LatestPrice.Volume
 			dto.PriceAt = r.LatestPrice.Timestamp
 		}
@@ -132,12 +133,12 @@ func (h *MarketHandler) GetStockDetail(c echo.Context) error {
 		CreatedAt:  r.Stock.CreatedAt,
 	}
 	if r.LatestPrice != nil {
-		resp.Price = r.LatestPrice.Price
-		resp.Bid = r.LatestPrice.Bid
-		resp.Ask = r.LatestPrice.Ask
+		resp.Price = pkgdecimal.From(r.LatestPrice.Price)
+		resp.Bid = pkgdecimal.From(r.LatestPrice.Bid)
+		resp.Ask = pkgdecimal.From(r.LatestPrice.Ask)
 		var spread apd.Decimal
 		_, _ = handlerDecCtx.Sub(&spread, &r.LatestPrice.Ask, &r.LatestPrice.Bid)
-		resp.Spread = spread
+		resp.Spread = pkgdecimal.From(spread)
 		resp.Volume = r.LatestPrice.Volume
 		resp.PriceAt = r.LatestPrice.Timestamp
 	}
@@ -157,10 +158,10 @@ func (h *MarketHandler) GetCurrentPrice(c echo.Context) error {
 
 	return response.Success(c, http.StatusOK, "Current price retrieved", PriceResponse{
 		Symbol:    symbol,
-		Price:     p.Price,
-		Bid:       p.Bid,
-		Ask:       p.Ask,
-		Spread:    func() apd.Decimal { var s apd.Decimal; _, _ = handlerDecCtx.Sub(&s, &p.Ask, &p.Bid); return s }(),
+		Price:     pkgdecimal.From(p.Price),
+		Bid:       pkgdecimal.From(p.Bid),
+		Ask:       pkgdecimal.From(p.Ask),
+		Spread:    func() pkgdecimal.Decimal { var s apd.Decimal; _, _ = handlerDecCtx.Sub(&s, &p.Ask, &p.Bid); return pkgdecimal.From(s) }(),
 		Volume:    p.Volume,
 		Timestamp: p.Timestamp,
 	})
@@ -200,10 +201,10 @@ func (h *MarketHandler) GetPriceHistory(c echo.Context) error {
 	for _, p := range prices {
 		dtos = append(dtos, PriceResponse{
 			Symbol:    symbol,
-			Price:     p.Price,
-			Bid:       p.Bid,
-			Ask:       p.Ask,
-			Spread:    func() apd.Decimal { var s apd.Decimal; _, _ = handlerDecCtx.Sub(&s, &p.Ask, &p.Bid); return s }(),
+			Price:     pkgdecimal.From(p.Price),
+			Bid:       pkgdecimal.From(p.Bid),
+			Ask:       pkgdecimal.From(p.Ask),
+			Spread:    func() pkgdecimal.Decimal { var s apd.Decimal; _, _ = handlerDecCtx.Sub(&s, &p.Ask, &p.Bid); return pkgdecimal.From(s) }(),
 			Volume:    p.Volume,
 			Timestamp: p.Timestamp,
 		})
@@ -255,10 +256,10 @@ func (h *MarketHandler) GetCandles(c echo.Context) error {
 	for _, k := range candles {
 		dtos = append(dtos, CandleDTO{
 			Timestamp: k.Timestamp,
-			Open:      k.Open,
-			High:      k.High,
-			Low:       k.Low,
-			Close:     k.Close,
+			Open:      pkgdecimal.From(k.Open),
+			High:      pkgdecimal.From(k.High),
+			Low:       pkgdecimal.From(k.Low),
+			Close:     pkgdecimal.From(k.Close),
 			Volume:    k.Volume,
 		})
 	}
@@ -349,9 +350,9 @@ func (h *MarketHandler) GetPremiumAnalysis(c echo.Context) error {
 		"symbol":         symbol,
 		"user_id":        userID,
 		"recommendation": recommendation,
-		"last_close":     last.Close,
-		"sma_14":         sma14,
-		"momentum_pct":   momentum,
+		"last_close":     pkgdecimal.From(last.Close),
+		"sma_14":         pkgdecimal.From(sma14),
+		"momentum_pct":   pkgdecimal.From(momentum),
 		"candles_used":   n,
 		"as_of":          last.Timestamp,
 	})

@@ -196,7 +196,7 @@ func (s *EventSourcingService) insertOutboxEntries(tx *gorm.DB, events []domain.
 			Symbol:     placed.Symbol,
 			Side:       placed.Side,
 			OrderType:  placed.OrderType,
-			Price:      placed.Price,
+			Price:      placed.Price.Decimal,
 			Quantity:   placed.Quantity,
 			OccurredAt: placed.OccurredAt,
 		}

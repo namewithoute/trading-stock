@@ -3,6 +3,8 @@ package order
 import (
 	"time"
 
+	pkgdecimal "trading-stock/pkg/decimal"
+
 	"github.com/cockroachdb/apd/v3"
 )
 
@@ -75,7 +77,7 @@ func (a *OrderAggregate) apply(event DomainEvent, isNew bool) {
 		a.Side = e.Side
 		a.OrderType = e.OrderType
 		a.Quantity = e.Quantity
-		a.Price = e.Price
+		a.Price = e.Price.Decimal
 		a.Status = StatusPending
 		a.FilledQuantity = 0
 		a.AvgFillPrice = apd.Decimal{}
@@ -90,7 +92,7 @@ func (a *OrderAggregate) apply(event DomainEvent, isNew bool) {
 	case OrderPartialFillEvent:
 		a.FilledQuantity = e.TotalFilledQty
 		delta := new(apd.Decimal)
-		_, _ = decCtx.Mul(delta, &e.FillPrice, apd.New(int64(e.FilledQty), 0))
+		_, _ = decCtx.Mul(delta, &e.FillPrice.Decimal, apd.New(int64(e.FilledQty), 0))
 		_, _ = decCtx.Add(&a.totalFillValue, &a.totalFillValue, delta)
 		_, _ = decCtx.Quo(&a.AvgFillPrice, &a.totalFillValue, apd.New(int64(a.FilledQuantity), 0))
 		a.Status = StatusPartiallyFilled
@@ -98,7 +100,7 @@ func (a *OrderAggregate) apply(event DomainEvent, isNew bool) {
 
 	case OrderFilledEvent:
 		a.FilledQuantity = e.TotalFilledQty
-		a.AvgFillPrice = e.AvgFillPrice
+		a.AvgFillPrice = e.AvgFillPrice.Decimal
 		a.Status = StatusFilled
 		a.UpdatedAt = e.OccurredAt
 
@@ -148,7 +150,7 @@ func PlaceOrder(id, userID, accountID, symbol string, side Side, orderType Order
 		Side:        side,
 		OrderType:   orderType,
 		Quantity:    quantity,
-		Price:       price,
+		Price:       pkgdecimal.From(price),
 		OccurredAt:  nowUTC(),
 	}, true)
 	return agg, nil
@@ -188,9 +190,9 @@ func (a *OrderAggregate) RecordFill(filledQty int, fillPrice apd.Decimal) error 
 		a.apply(OrderFilledEvent{
 			AggregateID:    a.ID,
 			FilledQty:      filledQty,
-			FillPrice:      fillPrice,
+			FillPrice:      pkgdecimal.From(fillPrice),
 			TotalFilledQty: newTotalFilled,
-			AvgFillPrice:   *newAvg,
+			AvgFillPrice:   pkgdecimal.From(*newAvg),
 			OccurredAt:     nowUTC(),
 		}, true)
 	} else {
@@ -198,7 +200,7 @@ func (a *OrderAggregate) RecordFill(filledQty int, fillPrice apd.Decimal) error 
 		a.apply(OrderPartialFillEvent{
 			AggregateID:    a.ID,
 			FilledQty:      filledQty,
-			FillPrice:      fillPrice,
+			FillPrice:      pkgdecimal.From(fillPrice),
 			TotalFilledQty: newTotalFilled,
 			OccurredAt:     nowUTC(),
 		}, true)

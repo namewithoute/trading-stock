@@ -3,6 +3,7 @@
 import (
 	"net/http"
 	orderUC "trading-stock/internal/application/order"
+	pkgdecimal "trading-stock/pkg/decimal"
 	"trading-stock/pkg/response"
 
 	"github.com/labstack/echo/v4"
@@ -53,7 +54,7 @@ func (h *OrderHandler) CreateOrder(c echo.Context) error {
 		orderReq.Symbol,
 		orderReq.Side,
 		orderReq.Type,
-		orderReq.Price,
+		orderReq.Price.Decimal,
 		int(orderReq.Quantity),
 	)
 	if err != nil {
@@ -69,7 +70,7 @@ func (h *OrderHandler) CreateOrder(c echo.Context) error {
 		Side:      string(createdOrder.Side),
 		Type:      string(createdOrder.OrderType),
 		Quantity:  createdOrder.Quantity,
-		Price:     createdOrder.Price,
+		Price:     pkgdecimal.From(createdOrder.Price),
 		Status:    string(createdOrder.Status),
 		CreatedAt: createdOrder.CreatedAt,
 	})
@@ -122,7 +123,7 @@ func (h *OrderHandler) ListOrders(c echo.Context) error {
 			Type:           string(o.OrderType),
 			Quantity:       o.Quantity,
 			FilledQuantity: o.FilledQuantity,
-			Price:          o.Price,
+			Price:          pkgdecimal.From(o.Price),
 			Status:         string(o.Status),
 			CreatedAt:      o.CreatedAt,
 		})
@@ -168,8 +169,8 @@ func (h *OrderHandler) GetOrderDetail(c echo.Context) error {
 		Type:           string(o.OrderType),
 		Quantity:       o.Quantity,
 		FilledQuantity: o.FilledQuantity,
-		Price:          o.Price,
-		AvgFillPrice:   o.AvgFillPrice,
+		Price:          pkgdecimal.From(o.Price),
+		AvgFillPrice:   pkgdecimal.From(o.AvgFillPrice),
 		Status:         string(o.Status),
 		CreatedAt:      o.CreatedAt,
 		UpdatedAt:      o.UpdatedAt,
@@ -225,7 +226,7 @@ func (h *OrderHandler) UpdateOrder(c echo.Context) error {
 	}
 
 	// 2. Delegate to usecase (ownership check + cancel + recreate happens there)
-	updatedOrder, err := h.orderUseCase.UpdateOrder(c.Request().Context(), userID, orderID, req.Price, req.Quantity)
+	updatedOrder, err := h.orderUseCase.UpdateOrder(c.Request().Context(), userID, orderID, req.Price.Decimal, req.Quantity)
 	if err != nil {
 		h.logger.Error("Failed to update order",
 			zap.Error(err),
@@ -244,8 +245,8 @@ func (h *OrderHandler) UpdateOrder(c echo.Context) error {
 		Type:           string(updatedOrder.OrderType),
 		Quantity:       updatedOrder.Quantity,
 		FilledQuantity: updatedOrder.FilledQuantity,
-		Price:          updatedOrder.Price,
-		AvgFillPrice:   updatedOrder.AvgFillPrice,
+		Price:          pkgdecimal.From(updatedOrder.Price),
+		AvgFillPrice:   pkgdecimal.From(updatedOrder.AvgFillPrice),
 		Status:         string(updatedOrder.Status),
 		CreatedAt:      updatedOrder.CreatedAt,
 		UpdatedAt:      updatedOrder.UpdatedAt,

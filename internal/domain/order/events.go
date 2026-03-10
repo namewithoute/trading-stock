@@ -3,7 +3,7 @@ package order
 import (
 	"time"
 
-	"github.com/cockroachdb/apd/v3"
+	pkgdecimal "trading-stock/pkg/decimal"
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -42,8 +42,8 @@ type OrderPlacedEvent struct {
 	Side        Side        `json:"side"`
 	OrderType   OrderType   `json:"order_type"`
 	Quantity    int         `json:"quantity"`
-	Price       apd.Decimal `json:"price"`
-	OccurredAt  time.Time   `json:"occurred_at"`
+	Price       pkgdecimal.Decimal `json:"price"`
+	OccurredAt  time.Time          `json:"occurred_at"`
 }
 
 func (e OrderPlacedEvent) GetEventType() EventType  { return EventOrderPlaced }
@@ -63,9 +63,9 @@ func (e OrderCancelledEvent) GetOccurredAt() time.Time { return e.OccurredAt }
 // OrderPartialFillEvent is emitted when the matching engine partially executes an order.
 type OrderPartialFillEvent struct {
 	AggregateID    string      `json:"aggregate_id"`
-	FilledQty      int         `json:"filled_qty"`       // quantity filled in THIS trade
-	FillPrice      apd.Decimal `json:"fill_price"`       // price of THIS trade
-	TotalFilledQty int         `json:"total_filled_qty"` // cumulative filled quantity
+	FilledQty      int                `json:"filled_qty"`       // quantity filled in THIS trade
+	FillPrice      pkgdecimal.Decimal `json:"fill_price"`       // price of THIS trade
+	TotalFilledQty int                `json:"total_filled_qty"` // cumulative filled quantity
 	OccurredAt     time.Time   `json:"occurred_at"`
 }
 
@@ -76,10 +76,10 @@ func (e OrderPartialFillEvent) GetOccurredAt() time.Time { return e.OccurredAt }
 // OrderFilledEvent is emitted when the order is completely executed.
 type OrderFilledEvent struct {
 	AggregateID    string      `json:"aggregate_id"`
-	FilledQty      int         `json:"filled_qty"`
-	FillPrice      apd.Decimal `json:"fill_price"`
-	TotalFilledQty int         `json:"total_filled_qty"`
-	AvgFillPrice   apd.Decimal `json:"avg_fill_price"`
+	FilledQty      int                `json:"filled_qty"`
+	FillPrice      pkgdecimal.Decimal `json:"fill_price"`
+	TotalFilledQty int                `json:"total_filled_qty"`
+	AvgFillPrice   pkgdecimal.Decimal `json:"avg_fill_price"`
 	OccurredAt     time.Time   `json:"occurred_at"`
 }
 

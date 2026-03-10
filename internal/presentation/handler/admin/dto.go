@@ -6,7 +6,7 @@ import (
 	"trading-stock/internal/domain/order"
 	"trading-stock/internal/domain/user"
 
-	"github.com/cockroachdb/apd/v3"
+	pkgdecimal "trading-stock/pkg/decimal"
 )
 
 // ApproveKYCRequest is the request body for approving/rejecting KYC.
@@ -57,9 +57,9 @@ type OrderAdminDTO struct {
 	Side           string      `json:"side"`
 	OrderType      string      `json:"order_type"`
 	Quantity       int         `json:"quantity"`
-	Price          apd.Decimal `json:"price"`
-	FilledQuantity int         `json:"filled_quantity"`
-	AvgFillPrice   apd.Decimal `json:"avg_fill_price"`
+	Price          pkgdecimal.Decimal `json:"price"`
+	FilledQuantity int                `json:"filled_quantity"`
+	AvgFillPrice   pkgdecimal.Decimal `json:"avg_fill_price"`
 	Status         string      `json:"status"`
 	CreatedAt      time.Time   `json:"created_at"`
 	UpdatedAt      time.Time   `json:"updated_at"`
@@ -74,9 +74,9 @@ func toOrderAdminDTO(o *order.OrderReadModel) OrderAdminDTO {
 		Side:           string(o.Side),
 		OrderType:      string(o.OrderType),
 		Quantity:       o.Quantity,
-		Price:          o.Price,
+		Price:          pkgdecimal.From(o.Price),
 		FilledQuantity: o.FilledQuantity,
-		AvgFillPrice:   o.AvgFillPrice,
+		AvgFillPrice:   pkgdecimal.From(o.AvgFillPrice),
 		Status:         string(o.Status),
 		CreatedAt:      o.CreatedAt,
 		UpdatedAt:      o.UpdatedAt,
