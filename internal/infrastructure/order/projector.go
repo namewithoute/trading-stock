@@ -3,6 +3,7 @@ package order
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -25,17 +26,16 @@ import (
 //	lifecycle.go → go p.Run(ctx)     (live-stream from Kafka)
 //	lifecycle.go → cancel()          (stop on SIGTERM)
 type Projector struct {
-	reader     *kafka.Reader
-	readRepo   domain.ReadModelRepository
-	eventStore EventStore
-	logger     *zap.Logger
+	reader   *kafka.Reader
+	brokers  []string
+	readRepo domain.ReadModelRepository
+	logger   *zap.Logger
 }
 
 // NewOrderProjector creates a Kafka reader and wires the projector.
 func NewOrderProjector(
 	brokers []string,
 	readRepo domain.ReadModelRepository,
-	eventStore EventStore,
 	logger *zap.Logger,
 ) *Projector {
 	reader := kafka.NewReader(kafka.ReaderConfig{
@@ -50,56 +50,66 @@ func NewOrderProjector(
 	})
 
 	return &Projector{
-		reader:     reader,
-		readRepo:   readRepo,
-		eventStore: eventStore,
-		logger:     logger,
+		reader:   reader,
+		brokers:  brokers,
+		readRepo: readRepo,
+		logger:   logger,
 	}
 }
 
 // ─── Rebuild ──────────────────────────────────────────────────────────────────
 
-// Rebuild performs a full catch-up projection by replaying every event from the
-// EventStore (Postgres) before the Kafka consumer loop starts.
+// Rebuild performs an incremental catch-up projection from Kafka.
+// It uses the same consumer group as the live projector, so it resumes from
+// committed offsets (or FirstOffset on first boot), then stops when the topic
+// is idle for a short period.
 func (p *Projector) Rebuild(ctx context.Context) error {
-	p.logger.Info("[ OrderProjector ] Starting catch-up rebuild from EventStore...")
+	p.logger.Info("[ OrderProjector ] Starting incremental catch-up rebuild from Kafka...")
 
-	all, err := p.eventStore.LoadAllDescriptors(ctx)
-	if err != nil {
-		return fmt.Errorf("OrderProjector Rebuild: %w", err)
-	}
-	if len(all) == 0 {
-		p.logger.Info("[ OrderProjector ] EventStore is empty — nothing to rebuild")
-		return nil
-	}
+	rebuildReader := kafka.NewReader(kafka.ReaderConfig{
+		Brokers:        p.brokers,
+		Topic:          KafkaTopicOrderEvents,
+		GroupID:        "order-projector",
+		MinBytes:       1,
+		MaxBytes:       10e6,
+		MaxWait:        1 * time.Second,
+		StartOffset:    kafka.FirstOffset,
+		CommitInterval: 0,
+	})
+	defer rebuildReader.Close()
 
-	// Keep in-memory read models grouped by aggregate to avoid N+1 upserts.
-	rms := make(map[string]*domain.OrderReadModel)
+	eventCount := 0
 
-	for _, d := range all {
-		rm, exists := rms[d.AggregateID]
-		if !exists {
-			rm = &domain.OrderReadModel{}
-			rms[d.AggregateID] = rm
+	for {
+		fetchCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		msg, err := rebuildReader.FetchMessage(fetchCtx)
+		cancel()
+		if err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			if errors.Is(err, context.DeadlineExceeded) {
+				break
+			}
+			return fmt.Errorf("order projector rebuild fetch: %w", err)
 		}
-		if err := applyDescriptor(d, rm); err != nil {
-			p.logger.Warn("[ OrderProjector ] Skipped unknown event during rebuild",
-				zap.String("event_type", string(d.EventType)),
-				zap.String("aggregate_id", d.AggregateID),
+
+		if err := p.handleMessage(ctx, msg); err != nil {
+			p.logger.Warn("[ OrderProjector ] Skipped event during incremental rebuild",
+				zap.Int64("offset", msg.Offset),
+				zap.Error(err),
 			)
 		}
-	}
 
-	// Flush all in-memory read models to DB.
-	for _, rm := range rms {
-		if err := p.readRepo.Upsert(ctx, rm); err != nil {
-			return fmt.Errorf("OrderProjector Rebuild upsert %s: %w", rm.ID, err)
+		if err := rebuildReader.CommitMessages(ctx, msg); err != nil {
+			return fmt.Errorf("order projector rebuild commit: %w", err)
 		}
+
+		eventCount++
 	}
 
-	p.logger.Info("[ OrderProjector ] Rebuild complete",
-		zap.Int("aggregates", len(rms)),
-		zap.Int("events", len(all)),
+	p.logger.Info("[ OrderProjector ] Incremental rebuild complete",
+		zap.Int("events", eventCount),
 	)
 	return nil
 }

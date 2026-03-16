@@ -60,7 +60,6 @@ func (a *App) wire() error {
 	a.AccountProjector = infraAccount.NewProjector(
 		a.Config.Kafka.Brokers,
 		a.Repositories.AccountReadModelRepo,
-		accountEventStore,
 		a.Logger,
 	)
 	a.Logger.Info("[ Infrastructure ] Account Projector initialised")
@@ -77,7 +76,6 @@ func (a *App) wire() error {
 	a.OrderProjector = infraOrder.NewOrderProjector(
 		a.Config.Kafka.Brokers,
 		a.Repositories.OrderReadModelRepo,
-		orderEventStore,
 		a.Logger,
 	)
 	a.Logger.Info("[ Infrastructure ] Order Projector initialised")
