@@ -337,3 +337,88 @@ func TestMarketOrder(t *testing.T) {
 		t.Errorf("Expected trade price 150.00, got %s", trades[0].Price.String())
 	}
 }
+
+// TestMarketOrderPartialFillExpires tests that a market order with partial fill
+// gets StatusExpired (IOC semantics) instead of staying at PartiallyFilled.
+func TestMarketOrderPartialFillExpires(t *testing.T) {
+	engine, cancel := newTestEngine("AAPL")
+	defer cancel()
+
+	// Resting sell for only 3 shares
+	sellOrder := &order.Order{
+		ID:        uuid.New().String(),
+		UserID:    "seller1",
+		Symbol:    "AAPL",
+		Price:     mustDecimal("100.00"),
+		Quantity:  3,
+		Side:      order.SideSell,
+		Type:      order.TypeLimit,
+		Status:    order.StatusPending,
+		CreatedAt: time.Now(),
+	}
+	engine.SubmitOrder(context.Background(), sellOrder)
+
+	// Market buy for 10 shares — only 3 can fill
+	marketBuy := &order.Order{
+		ID:        uuid.New().String(),
+		UserID:    "buyer1",
+		Symbol:    "AAPL",
+		Quantity:  10,
+		Side:      order.SideBuy,
+		Type:      order.TypeMarket,
+		Status:    order.StatusPending,
+		CreatedAt: time.Now(),
+	}
+
+	trades, err := engine.SubmitOrder(context.Background(), marketBuy)
+	if err != nil {
+		t.Fatalf("Failed to submit market order: %v", err)
+	}
+
+	if len(trades) != 1 {
+		t.Fatalf("Expected 1 trade, got %d", len(trades))
+	}
+	if trades[0].Quantity != 3 {
+		t.Errorf("Expected trade quantity 3, got %d", trades[0].Quantity)
+	}
+
+	// Market order unfilled remainder must be expired (IOC), not stuck at PartiallyFilled
+	if marketBuy.Status != order.StatusExpired {
+		t.Errorf("Expected market order status Expired, got %s", marketBuy.Status)
+	}
+	if marketBuy.FilledQuantity != 3 {
+		t.Errorf("Expected filled quantity 3, got %d", marketBuy.FilledQuantity)
+	}
+}
+
+// TestMarketOrderEmptyBookExpires tests that a market order on an empty book
+// receives 0 trades and is immediately expired.
+func TestMarketOrderEmptyBookExpires(t *testing.T) {
+	engine, cancel := newTestEngine("AAPL")
+	defer cancel()
+
+	marketBuy := &order.Order{
+		ID:        uuid.New().String(),
+		UserID:    "buyer1",
+		Symbol:    "AAPL",
+		Quantity:  5,
+		Side:      order.SideBuy,
+		Type:      order.TypeMarket,
+		Status:    order.StatusPending,
+		CreatedAt: time.Now(),
+	}
+
+	trades, err := engine.SubmitOrder(context.Background(), marketBuy)
+	if err != nil {
+		t.Fatalf("Failed to submit market order: %v", err)
+	}
+
+	if len(trades) != 0 {
+		t.Errorf("Expected 0 trades on empty book, got %d", len(trades))
+	}
+
+	// Market order must be expired, not left at Pending
+	if marketBuy.Status != order.StatusExpired {
+		t.Errorf("Expected market order status Expired, got %s", marketBuy.Status)
+	}
+}

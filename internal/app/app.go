@@ -70,6 +70,9 @@ type App struct {
 	// Portfolio: consumes trades.executed → updates stock positions
 	PortfolioTradeConsumer *infraPortfolio.TradeConsumer
 
+	// Market expire: consumes orders.market_expired → expires unfilled market order remainder
+	MarketExpireConsumer *infraOrder.MarketExpireConsumer
+
 	// Single cancel for all background goroutines
 	workerCancel context.CancelFunc
 }

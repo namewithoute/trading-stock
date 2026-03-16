@@ -110,6 +110,14 @@ func (a *App) wire() error {
 	)
 	a.Logger.Info("[ Infrastructure ] Order fill consumer initialised")
 
+	// ── 1h-2. Market order expire consumer ─────────────────────────────
+	a.MarketExpireConsumer = infraOrder.NewMarketExpireConsumer(
+		a.Config.Kafka.Brokers,
+		orderEventSvc,
+		a.Logger,
+	)
+	a.Logger.Info("[ Infrastructure ] Market expire consumer initialised")
+
 	// ── 1i. Account trade settlement consumer ─────────────────────────
 	a.AccountTradeConsumer = infraAccount.NewTradeConsumer(
 		a.Config.Kafka.Brokers,

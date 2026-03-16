@@ -88,6 +88,13 @@ func (a *App) Run() error {
 		}()
 	}
 
+	// ── Market Expire Consumer ──────────────────────────────────────
+	if a.MarketExpireConsumer != nil {
+		go func() {
+			a.MarketExpireConsumer.Run(workerCtx)
+		}()
+	}
+
 	// ── 2. Start HTTP server ───────────────────────────────────────────
 	errChan := make(chan error, 1)
 	go func() {

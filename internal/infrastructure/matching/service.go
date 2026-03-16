@@ -69,7 +69,7 @@ func (s *MatchingService) HandleOrderAccepted(ctx context.Context, msg infraOrde
 		return fmt.Errorf("MatchingEngine.SubmitOrder(%s): %w", msg.OrderID, err)
 	}
 
-	if len(trades) == 0 {
+	if len(trades) == 0 && o.Type != domainOrder.TypeMarket {
 		s.logger.Info("[ Matching ] order queued, no immediate fill",
 			zap.String("order_id", msg.OrderID),
 			zap.String("symbol", msg.Symbol),
@@ -133,6 +133,32 @@ func (s *MatchingService) HandleOrderAccepted(ctx context.Context, msg infraOrde
 				zap.Int("quantity", t.Quantity),
 			)
 		}
+
+		// ── Market order with unfilled remainder → write expire outbox event ──
+		// Market orders are Immediate-or-Cancel: the unfilled portion must be
+		// expired. This outbox event tells the MarketExpireConsumer to close
+		// the order aggregate once all fills have been applied.
+		if o.Type == domainOrder.TypeMarket && o.RemainingQuantity() > 0 {
+			expireMsg := infraEvents.MarketOrderExpiredMessage{
+				EventID:        uuid.New().String(),
+				OrderID:        o.ID,
+				FilledQuantity: o.FilledQuantity,
+				OccurredAt:     time.Now().UTC(),
+			}
+			payload, err := json.Marshal(expireMsg)
+			if err != nil {
+				return fmt.Errorf("marshal MarketOrderExpiredMessage: %w", err)
+			}
+			if err := infraOutbox.InsertOutboxEvent(tx, expireMsg.EventID, infraEvents.KafkaTopicOrdersMarketExpired, o.ID, payload); err != nil {
+				return fmt.Errorf("insert outbox orders.market_expired: %w", err)
+			}
+			s.logger.Info("[ Matching ] market order remainder expired",
+				zap.String("order_id", o.ID),
+				zap.Int("filled", o.FilledQuantity),
+				zap.Int("remaining", o.RemainingQuantity()),
+			)
+		}
+
 		return nil
 	})
 }

@@ -268,7 +268,9 @@ func (me *MatchingEngine) processOrder(ob *OrderBook, o *order.Order) ([]*Trade,
 		o.Status = order.StatusFilled
 		me.publishOrderUpdate(o)
 	} else if o.Type == order.TypeMarket && o.RemainingQuantity() > 0 {
-		o.Status = order.StatusPartiallyFilled
+		// Market orders are Immediate-or-Cancel: unfilled remainder is expired,
+		// NOT kept in the order book.
+		o.Status = order.StatusExpired
 		me.publishOrderUpdate(o)
 	}
 
