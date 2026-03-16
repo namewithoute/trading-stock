@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	domain "trading-stock/internal/domain/account"
+	"trading-stock/internal/infrastructure/outbox"
 
 	"github.com/google/uuid"
-	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 // KafkaTopicAccountEvents is the Kafka topic for account domain events.
@@ -20,27 +20,22 @@ const KafkaTopicAccountEvents = "account.events"
 //
 // Responsibilities:
 //  1. Load       – deserialise + replay all events from EventStore → Aggregate
-//  2. Save       – serialise new events → AppendEvents (Postgres) → publish (Kafka)
+//  2. Save       – serialise new events → AppendEvents (Postgres) + outbox rows
 //
 // Wire rule: only wire.go may construct this struct. All other layers receive
 // it through the domain.Repository interface.
 type EventSourcingService struct {
 	eventStore EventStore
-	publisher  *kafka.Writer
 	logger     *zap.Logger
 }
 
 // NewEventSourcingService constructs the service.
-// publisher must be a *kafka.Writer already configured with brokers.
-// Topic is set per-message so one writer can serve multiple topics.
 func NewEventSourcingService(
 	eventStore EventStore,
-	publisher *kafka.Writer,
 	logger *zap.Logger,
 ) *EventSourcingService {
 	return &EventSourcingService{
 		eventStore: eventStore,
-		publisher:  publisher,
 		logger:     logger,
 	}
 }
@@ -71,14 +66,11 @@ func (s *EventSourcingService) Load(ctx context.Context, aggregateID string) (*d
 
 // ─── Save ────────────────────────────────────────────────────────────────────
 
-// Save persists uncommitted aggregate events then publishes them to Kafka.
+// Save persists uncommitted aggregate events and writes Kafka-bound outbox rows.
 //
 // Guarantees:
-//   - Postgres write happens FIRST (atomically inside AppendEvents).
-//   - Kafka publish is attempted synchronously AFTER the DB commit succeeds.
-//   - If Kafka publish fails the error is logged but NOT returned, so the
-//     HTTP caller still gets a 201/200. The Projector can replay from
-//     the EventStore on restart to recover read models.
+//   - EventStore rows and outbox rows commit atomically in the same DB transaction.
+//   - Kafka delivery is delegated to the outbox transport (e.g. Debezium).
 func (s *EventSourcingService) Save(ctx context.Context, agg *domain.AccountAggregate) error {
 	changes := agg.UncommittedEvents()
 	if len(changes) == 0 {
@@ -105,10 +97,13 @@ func (s *EventSourcingService) Save(ctx context.Context, agg *domain.AccountAggr
 		})
 	}
 
-	// ── Step 2: Persist to EventStore (Postgres) ──────────────────────
-	// expectedVersion = state BEFORE this command (optimistic concurrency)
-	if err := s.eventStore.AppendEvents(ctx, agg.ID, baseVersion, descriptors); err != nil {
-		return fmt.Errorf("eventStore.AppendEvents: %w", err)
+	// ── Step 2: Persist to EventStore (Postgres) + outbox in same TX ──
+	if err := s.eventStore.AppendEventsWithHook(ctx, agg.ID, baseVersion, descriptors,
+		func(tx *gorm.DB) error {
+			return s.insertOutboxEntries(tx, descriptors)
+		},
+	); err != nil {
+		return fmt.Errorf("eventStore.AppendEventsWithHook: %w", err)
 	}
 
 	// Clear the uncommitted buffer only after successful DB commit.
@@ -120,64 +115,20 @@ func (s *EventSourcingService) Save(ctx context.Context, agg *domain.AccountAggr
 		zap.Int("base_version", baseVersion),
 	)
 
-	// ── Step 3: Publish to Kafka ──────────────────────────────────────
-	// Done synchronously so the goroutine pool doesn't grow unbounded.
-	// A failure here is logged only – the system is still consistent
-	// because the EventStore (source of truth) already has the events.
-	if err := s.publishToKafka(ctx, descriptors); err != nil {
-		s.logger.Error("Kafka publish failed (events already in EventStore – safe to continue)",
-			zap.Error(err),
-			zap.String("aggregate_id", agg.ID),
-			zap.String("topic", KafkaTopicAccountEvents),
-		)
-		// Do NOT return err: the DB commit succeeded. Projector can replay.
-	}
-
 	return nil
 }
 
-// ─── publishToKafka ──────────────────────────────────────────────────────────
-
-// publishToKafka serialises each EventDescriptor as a Kafka message.
-// Key = AggregateID ensures all events for the same account land on the same partition.
-func (s *EventSourcingService) publishToKafka(ctx context.Context, descs []EventDescriptor) error {
-	if s.publisher == nil {
-		return fmt.Errorf("kafka writer is nil – skipping publish")
-	}
-
-	msgs := make([]kafka.Message, 0, len(descs))
+func (s *EventSourcingService) insertOutboxEntries(tx *gorm.DB, descs []EventDescriptor) error {
 	for _, d := range descs {
 		envelope, err := json.Marshal(d)
 		if err != nil {
-			// Skip this event but keep going with others
-			s.logger.Error("Failed to marshal EventDescriptor",
-				zap.String("event_type", string(d.EventType)),
-				zap.Error(err),
-			)
-			continue
+			return fmt.Errorf("marshal account EventDescriptor %s: %w", d.EventType, err)
 		}
-		msgs = append(msgs, kafka.Message{
-			Topic: KafkaTopicAccountEvents, // per-message topic (writer has no default topic)
-			Key:   []byte(d.AggregateID),
-			Value: envelope,
-			Time:  time.Now().UTC(),
-		})
+
+		if err := outbox.InsertOutboxEvent(tx, d.ID, KafkaTopicAccountEvents, d.AggregateID, envelope); err != nil {
+			return fmt.Errorf("insert outbox account event %s v%d: %w", d.EventType, d.Version, err)
+		}
 	}
 
-	if len(msgs) == 0 {
-		return nil
-	}
-
-	writeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	if err := s.publisher.WriteMessages(writeCtx, msgs...); err != nil {
-		return fmt.Errorf("kafka.WriteMessages: %w", err)
-	}
-
-	s.logger.Info("Account events published to Kafka",
-		zap.Int("count", len(msgs)),
-		zap.String("topic", KafkaTopicAccountEvents),
-	)
 	return nil
 }

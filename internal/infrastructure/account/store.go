@@ -5,6 +5,8 @@ import (
 	"time"
 
 	domain "trading-stock/internal/domain/account"
+
+	"gorm.io/gorm"
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -33,6 +35,10 @@ type EventDescriptor struct {
 type EventStore interface {
 	// AppendEvents persists new events with optimistic concurrency control.
 	AppendEvents(ctx context.Context, aggregateID string, expectedVersion int, events []EventDescriptor) error
+
+	// AppendEventsWithHook persists events and runs afterFn(tx) in the same
+	// transaction so callers can insert outbox rows atomically.
+	AppendEventsWithHook(ctx context.Context, aggregateID string, expectedVersion int, events []EventDescriptor, afterFn func(tx *gorm.DB) error) error
 
 	// LoadEvents returns all events for an aggregate, ordered by version ASC.
 	LoadEvents(ctx context.Context, aggregateID string) ([]EventDescriptor, error)

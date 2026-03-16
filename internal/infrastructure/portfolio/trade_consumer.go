@@ -131,14 +131,14 @@ func (c *TradeConsumer) updatePosition(ctx context.Context, userID, symbol strin
 				zap.String("position_id", existing.ID), zap.Error(err))
 			return
 		}
+		if err := c.portfolioRepo.Update(ctx, existing); err != nil {
+			c.logger.Error("[ PortfolioTradeConsumer ] Persist reduced position failed",
+				zap.String("position_id", existing.ID), zap.Error(err))
+			return
+		}
 		if existing.IsClosed() {
 			if err := c.portfolioRepo.Delete(ctx, existing.ID); err != nil {
 				c.logger.Error("[ PortfolioTradeConsumer ] Delete closed position failed",
-					zap.String("position_id", existing.ID), zap.Error(err))
-			}
-		} else {
-			if err := c.portfolioRepo.Update(ctx, existing); err != nil {
-				c.logger.Error("[ PortfolioTradeConsumer ] Update position failed",
 					zap.String("position_id", existing.ID), zap.Error(err))
 			}
 		}

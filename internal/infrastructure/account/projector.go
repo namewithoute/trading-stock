@@ -300,7 +300,17 @@ func applyDescriptor(d EventDescriptor, rm *domain.AccountReadModel) error {
 			return fmt.Errorf("unmarshal StatusChangedEvent: %w", err)
 		}
 		rm.Status = evt.NewStatus
-
+	case domain.EventTradeSettled:
+		var evt domain.TradeSettledEvent
+		if err := json.Unmarshal(d.Payload, &evt); err != nil {
+			return fmt.Errorf("unmarshal TradeSettledEvent: %w", err)
+		}
+		if evt.Side == "BUY" {
+			_, _ = projDecCtx.Sub(&rm.Balance, &rm.Balance, &evt.Amount.Decimal)
+		} else {
+			_, _ = projDecCtx.Add(&rm.Balance, &rm.Balance, &evt.Amount.Decimal)
+			_, _ = projDecCtx.Add(&rm.BuyingPower, &rm.BuyingPower, &evt.Amount.Decimal)
+		}
 	default:
 		return fmt.Errorf("unknown event type: %s", d.EventType)
 	}

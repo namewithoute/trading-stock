@@ -7,7 +7,6 @@ import (
 	infraMarket "trading-stock/internal/infrastructure/market"
 	infraMatching "trading-stock/internal/infrastructure/matching"
 	infraOrder "trading-stock/internal/infrastructure/order"
-	infraOutbox "trading-stock/internal/infrastructure/outbox"
 	infraPortfolio "trading-stock/internal/infrastructure/portfolio"
 	infraUser "trading-stock/internal/infrastructure/user"
 	"trading-stock/internal/presentation/handler"
@@ -53,7 +52,6 @@ func (a *App) wire() error {
 	accountEventStore := infraAccount.NewEventStore(a.DB)
 	accountEventSvc := infraAccount.NewEventSourcingService(
 		accountEventStore,
-		a.Kafka,
 		a.Logger,
 	)
 	a.Logger.Info("[ Infrastructure ] Account EventSourcing service initialised")
@@ -71,7 +69,6 @@ func (a *App) wire() error {
 	orderEventStore := infraOrder.NewEventStore(a.DB)
 	orderEventSvc := infraOrder.NewEventSourcingService(
 		orderEventStore,
-		a.Kafka,
 		a.Logger,
 	)
 	a.Logger.Info("[ Infrastructure ] Order EventSourcing service initialised")
@@ -89,8 +86,8 @@ func (a *App) wire() error {
 	// The relay polls outbox_events and pushes pending rows to Kafka so
 	// downstream consumers (matching engine, order fill, account, market)
 	// receive their messages reliably.
-	a.OutboxRelay = infraOutbox.NewOutboxRelay(a.DB, a.Kafka, a.Logger)
-	a.Logger.Info("[ Infrastructure ] Outbox relay initialised")
+	// a.OutboxRelay = infraOutbox.NewOutboxRelay(a.DB, a.Kafka, a.Logger)
+	// a.Logger.Info("[ Infrastructure ] Outbox relay initialised")
 
 	// ── 1g. Matching engine + consumer ────────────────────────────────
 	matchingEngine := engine.NewMatchingEngine(engine.MatchingEngineConfig{

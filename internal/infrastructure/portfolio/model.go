@@ -3,6 +3,9 @@ package portfolio
 import (
 	"time"
 
+	infraAccount "trading-stock/internal/infrastructure/account"
+	infraUser "trading-stock/internal/infrastructure/user"
+
 	domain "trading-stock/internal/domain/portfolio"
 )
 
@@ -12,6 +15,9 @@ type PositionModel struct {
 	UserID    string `gorm:"type:uuid;index;not null"`
 	AccountID string `gorm:"type:uuid;index;not null"`
 	Symbol    string `gorm:"type:varchar(10);index;not null"`
+
+	User    *infraUser.UserModel             `gorm:"foreignKey:UserID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT"`
+	Account *infraAccount.AccountReadModelDB `gorm:"foreignKey:AccountID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT"`
 
 	Quantity     int     `gorm:"not null"`
 	AvgPrice     float64 `gorm:"type:decimal(20,4);not null"`

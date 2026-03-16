@@ -90,6 +90,10 @@ func InitPostgresDB(ctx context.Context, cfg config.DatabaseConfig, log *zap.Log
 func AutoMigrateModels(db *gorm.DB, log *zap.Logger) error {
 	log.Info("Starting database migrations...")
 
+	if err := cleanupOrphanedPositions(db, log); err != nil {
+		return fmt.Errorf("failed to cleanup orphaned positions before migration: %w", err)
+	}
+
 	// List of all persistence models to migrate
 	models := []interface{}{
 		// User
@@ -133,6 +137,33 @@ func AutoMigrateModels(db *gorm.DB, log *zap.Logger) error {
 	log.Info("Database migrations completed successfully",
 		zap.Int("models_migrated", len(models)),
 	)
+
+	return nil
+}
+
+// cleanupOrphanedPositions removes rows in positions that would violate FK constraints.
+// This allows adding FK constraints to existing databases that already contain orphaned data.
+func cleanupOrphanedPositions(db *gorm.DB, log *zap.Logger) error {
+	if !db.Migrator().HasTable(&infraPortfolio.PositionModel{}) {
+		return nil
+	}
+
+	if !db.Migrator().HasTable(&infraUser.UserModel{}) || !db.Migrator().HasTable(&infraAccount.AccountReadModelDB{}) {
+		return nil
+	}
+
+	result := db.Exec(`
+		DELETE FROM positions p
+		WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.id = p.user_id)
+		   OR NOT EXISTS (SELECT 1 FROM account_read_models a WHERE a.id = p.account_id)
+	`)
+	if result.Error != nil {
+		return result.Error
+	}
+
+	if result.RowsAffected > 0 {
+		log.Warn("Removed orphaned positions before FK migration", zap.Int64("rows_deleted", result.RowsAffected))
+	}
 
 	return nil
 }

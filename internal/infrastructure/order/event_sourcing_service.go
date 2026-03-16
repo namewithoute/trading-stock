@@ -11,7 +11,6 @@ import (
 	pkgdecimal "trading-stock/pkg/decimal"
 
 	"github.com/google/uuid"
-	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -41,22 +40,19 @@ type OrderAcceptedMessage struct {
 //
 // Responsibilities:
 //  1. Load  – deserialise + replay all events from EventStore → Aggregate
-//  2. Save  – serialise uncommitted events → AppendEvents (Postgres) → publish (Kafka)
+//  2. Save  – serialise uncommitted events → AppendEvents (Postgres) + outbox rows
 type EventSourcingService struct {
 	eventStore EventStore
-	publisher  *kafka.Writer
 	logger     *zap.Logger
 }
 
 // NewEventSourcingService constructs the service.
 func NewEventSourcingService(
 	eventStore EventStore,
-	publisher *kafka.Writer,
 	logger *zap.Logger,
 ) *EventSourcingService {
 	return &EventSourcingService{
 		eventStore: eventStore,
-		publisher:  publisher,
 		logger:     logger,
 	}
 }
@@ -87,11 +83,11 @@ func (s *EventSourcingService) Load(ctx context.Context, aggregateID string) (*d
 
 // ─── Save ────────────────────────────────────────────────────────────────────
 
-// Save persists uncommitted aggregate events then publishes them to Kafka.
+// Save persists uncommitted aggregate events and writes Kafka-bound outbox rows.
 //
 // Guarantees:
-//   - Postgres write first (inside AppendEvents transaction).
-//   - Kafka publish attempted after DB commit; failures are logged only.
+//   - EventStore rows and outbox rows commit atomically in the same DB transaction.
+//   - Kafka delivery is delegated to the outbox transport (e.g. Debezium).
 func (s *EventSourcingService) Save(ctx context.Context, agg *domain.OrderAggregate) error {
 	changes := agg.UncommittedEvents()
 	if len(changes) == 0 {
@@ -133,51 +129,26 @@ func (s *EventSourcingService) Save(ctx context.Context, agg *domain.OrderAggreg
 		zap.Int("base_version", baseVersion),
 	)
 
-	// ── Step 3: Publish to Kafka ──────────────────────────────────────
-	// Failure is non-fatal: EventStore is source of truth, Projector can replay.
-	if err := s.publishToKafka(ctx, descriptors); err != nil {
-		s.logger.Error("Kafka publish failed for order events (safe to continue)",
-			zap.Error(err),
-			zap.String("aggregate_id", agg.ID),
-		)
-	}
-
 	return nil
-}
-
-// ─── publishToKafka ──────────────────────────────────────────────────────────
-
-func (s *EventSourcingService) publishToKafka(ctx context.Context, descs []EventDescriptor) error {
-	if s.publisher == nil {
-		return fmt.Errorf("kafka writer is nil – skipping publish")
-	}
-
-	msgs := make([]kafka.Message, 0, len(descs))
-	for _, d := range descs {
-		envelope, err := json.Marshal(d)
-		if err != nil {
-			return fmt.Errorf("marshal event envelope %s: %w", d.EventType, err)
-		}
-		msgs = append(msgs, kafka.Message{
-			Topic: KafkaTopicOrderEvents,
-			Key:   []byte(d.AggregateID), // partition by order ID
-			Value: envelope,
-			Time:  d.OccurredAt,
-		})
-	}
-
-	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	return s.publisher.WriteMessages(writeCtx, msgs...)
 }
 
 // ─── insertOutboxEntries ──────────────────────────────────────────────────────
 
-// insertOutboxEntries writes outbox rows for events that need downstream fanout.
-// Currently only order.placed generates an orders.accepted outbox entry.
+// insertOutboxEntries writes outbox rows for all order domain events plus any
+// downstream integration messages derived from them.
 // Called inside the DB transaction from AppendEventsWithHook.
 func (s *EventSourcingService) insertOutboxEntries(tx *gorm.DB, events []domain.DomainEvent, descriptors []EventDescriptor) error {
+	for _, d := range descriptors {
+		envelope, err := json.Marshal(d)
+		if err != nil {
+			return fmt.Errorf("marshal order EventDescriptor %s: %w", d.EventType, err)
+		}
+
+		if err := outbox.InsertOutboxEvent(tx, d.ID, KafkaTopicOrderEvents, d.AggregateID, envelope); err != nil {
+			return fmt.Errorf("insert outbox order event %s v%d: %w", d.EventType, d.Version, err)
+		}
+	}
+
 	for i, ev := range events {
 		if ev.GetEventType() != domain.EventOrderPlaced {
 			continue
