@@ -2,7 +2,6 @@ package order
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
 	domain "trading-stock/internal/domain/order"
@@ -56,7 +55,7 @@ func (c *MarketExpireConsumer) Run(ctx context.Context) {
 		}
 
 		var msg infraEvents.MarketOrderExpiredMessage
-		if err := json.Unmarshal(m.Value, &msg); err != nil {
+		if err := infraEvents.DecodeKafkaPayload(m.Value, &msg); err != nil {
 			c.logger.Error("[ MarketExpireConsumer ] unmarshal error", zap.Error(err))
 			continue
 		}

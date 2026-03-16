@@ -2,7 +2,6 @@ package market
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
 	domainMarket "trading-stock/internal/domain/market"
@@ -63,7 +62,7 @@ func (c *MarketTradeConsumer) Run(ctx context.Context) {
 		}
 
 		var msg infraEvents.TradeExecutedMessage
-		if err := json.Unmarshal(m.Value, &msg); err != nil {
+		if err := infraEvents.DecodeKafkaPayload(m.Value, &msg); err != nil {
 			c.logger.Error("[ MarketTradeConsumer ] unmarshal error", zap.Error(err))
 			continue
 		}

@@ -205,7 +205,7 @@ func (c *MatchingConsumer) Run(ctx context.Context) {
 		}
 
 		var msg infraOrder.OrderAcceptedMessage
-		if err := json.Unmarshal(m.Value, &msg); err != nil {
+		if err := infraEvents.DecodeKafkaPayload(m.Value, &msg); err != nil {
 			c.logger.Error("[ MatchingConsumer ] unmarshal error",
 				zap.Error(err),
 				zap.ByteString("value", m.Value),

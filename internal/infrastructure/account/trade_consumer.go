@@ -2,7 +2,6 @@ package account
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	domainAccount "trading-stock/internal/domain/account"
@@ -66,7 +65,7 @@ func (c *TradeConsumer) Run(ctx context.Context) {
 		}
 
 		var msg infraEvents.TradeExecutedMessage
-		if err := json.Unmarshal(m.Value, &msg); err != nil {
+		if err := infraEvents.DecodeKafkaPayload(m.Value, &msg); err != nil {
 			c.logger.Error("[ AccountTradeConsumer ] unmarshal error", zap.Error(err))
 			continue
 		}

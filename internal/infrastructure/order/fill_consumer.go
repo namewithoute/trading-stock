@@ -2,7 +2,6 @@ package order
 
 import (
 	"context"
-	"encoding/json"
 
 	domain "trading-stock/internal/domain/order"
 	infraEvents "trading-stock/internal/infrastructure/events"
@@ -52,7 +51,7 @@ func (c *OrderFillConsumer) Run(ctx context.Context) {
 		}
 
 		var msg infraEvents.TradeExecutedMessage
-		if err := json.Unmarshal(m.Value, &msg); err != nil {
+		if err := infraEvents.DecodeKafkaPayload(m.Value, &msg); err != nil {
 			c.logger.Error("[ OrderFillConsumer ] unmarshal error", zap.Error(err))
 			continue
 		}

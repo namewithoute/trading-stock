@@ -7,6 +7,7 @@ import (
 	"time"
 
 	domain "trading-stock/internal/domain/account"
+	infraEvents "trading-stock/internal/infrastructure/events"
 
 	"github.com/cockroachdb/apd/v3"
 
@@ -190,7 +191,7 @@ func (p *Projector) Run(ctx context.Context) {
 func (p *Projector) project(ctx context.Context, msg kafka.Message) error {
 	// 1. Decode outer envelope
 	var descriptor EventDescriptor
-	if err := json.Unmarshal(msg.Value, &descriptor); err != nil {
+	if err := infraEvents.DecodeKafkaPayload(msg.Value, &descriptor); err != nil {
 		return fmt.Errorf("unmarshal EventDescriptor: %w", err)
 	}
 

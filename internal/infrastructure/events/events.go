@@ -3,6 +3,9 @@
 package events
 
 import (
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	pkgdecimal "trading-stock/pkg/decimal"
@@ -39,4 +42,54 @@ type MarketOrderExpiredMessage struct {
 	OrderID        string    `json:"order_id"`
 	FilledQuantity int       `json:"filled_quantity"` // total qty filled by the engine
 	OccurredAt     time.Time `json:"occurred_at"`
+}
+
+// DecodeKafkaPayload unmarshals both plain JSON messages and Debezium/Kafka
+// Connect schema-wrapped messages into out.
+func DecodeKafkaPayload(raw []byte, out interface{}) error {
+	// 1) Plain JSON payload (the happy path for native producers)
+	if err := json.Unmarshal(raw, out); err == nil {
+		return nil
+	}
+
+	// 2) Connect wrapper payload: {"schema":...,"payload":...}
+	var wrapper map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &wrapper); err == nil {
+		if payloadRaw, hasPayload := wrapper["payload"]; hasPayload {
+			if decodeErr := decodeFlexibleJSON(payloadRaw, out); decodeErr == nil {
+				return nil
+			}
+		}
+	}
+
+	// 3) Entire record is a JSON string (common when converter emits quoted payload)
+	if err := decodeFlexibleJSON(raw, out); err == nil {
+		return nil
+	}
+
+	return fmt.Errorf("invalid JSON payload")
+}
+
+func decodeFlexibleJSON(raw []byte, out interface{}) error {
+	// A) Raw JSON object/array payload
+	if err := json.Unmarshal(raw, out); err == nil {
+		return nil
+	}
+
+	// B) String payload that may contain JSON or base64(JSON)
+	var str string
+	if err := json.Unmarshal(raw, &str); err != nil {
+		return err
+	}
+
+	if err := json.Unmarshal([]byte(str), out); err == nil {
+		return nil
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(str)
+	if err != nil {
+		return err
+	}
+
+	return json.Unmarshal(decoded, out)
 }

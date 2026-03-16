@@ -2,7 +2,6 @@ package portfolio
 
 import (
 	"context"
-	"encoding/json"
 
 	domain "trading-stock/internal/domain/portfolio"
 	infraEvents "trading-stock/internal/infrastructure/events"
@@ -59,7 +58,7 @@ func (c *TradeConsumer) Run(ctx context.Context) {
 		}
 
 		var msg infraEvents.TradeExecutedMessage
-		if err := json.Unmarshal(m.Value, &msg); err != nil {
+		if err := infraEvents.DecodeKafkaPayload(m.Value, &msg); err != nil {
 			c.logger.Error("[ PortfolioTradeConsumer ] unmarshal error", zap.Error(err))
 			continue
 		}
