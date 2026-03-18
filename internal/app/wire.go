@@ -93,6 +93,13 @@ func (a *App) wire() error {
 		TradeChannelSize:  2000,
 		UpdateChannelSize: 2000,
 	})
+	a.MatchingEngine = matchingEngine
+	if a.Kafka != nil {
+		a.EventPublisher = engine.NewEventPublisher(a.Kafka, a.Logger)
+		a.Logger.Info("[ Infrastructure ] Matching event publisher initialised")
+	} else {
+		a.Logger.Warn("[ Infrastructure ] Kafka writer unavailable - matching event publisher disabled")
+	}
 	matchingSvc := infraMatching.NewMatchingService(matchingEngine, a.DB, a.Logger)
 	a.MatchingConsumer = infraMatching.NewMatchingConsumer(a.Config.Kafka.Brokers, matchingSvc, a.Logger)
 	a.Logger.Info("[ Infrastructure ] Matching engine + consumer initialised")
@@ -104,6 +111,14 @@ func (a *App) wire() error {
 		a.Logger,
 	)
 	a.Logger.Info("[ Infrastructure ] Order fill consumer initialised")
+
+	// ── 1h-1. Order update consumer ─────────────────────────────────────
+	a.OrderUpdatedConsumer = infraOrder.NewOrderUpdatedConsumer(
+		a.Config.Kafka.Brokers,
+		orderEventSvc,
+		a.Logger,
+	)
+	a.Logger.Info("[ Infrastructure ] Order updated consumer initialised")
 
 	// ── 1h-2. Market order expire consumer ─────────────────────────────
 	a.MarketExpireConsumer = infraOrder.NewMarketExpireConsumer(
@@ -121,6 +136,14 @@ func (a *App) wire() error {
 		a.Logger,
 	)
 	a.Logger.Info("[ Infrastructure ] Account trade consumer initialised")
+
+	// ── 1i-2. Account order update consumer ─────────────────────────────
+	a.AccountOrderUpdatedConsumer = infraAccount.NewOrderUpdatedConsumer(
+		a.Config.Kafka.Brokers,
+		accountEventSvc,
+		a.Logger,
+	)
+	a.Logger.Info("[ Infrastructure ] Account order-updated consumer initialised")
 
 	// ── 1k. Portfolio trade consumer ───────────────────────────────────
 	a.PortfolioTradeConsumer = infraPortfolio.NewTradeConsumer(

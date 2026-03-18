@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	domainOrder "trading-stock/internal/domain/order"
 	pkgdecimal "trading-stock/pkg/decimal"
 )
 
@@ -17,6 +18,8 @@ const KafkaTopicTradesExecuted = "trades.executed"
 // KafkaTopicOrdersMarketExpired is the topic for market orders whose unfilled
 // remainder should be expired (Immediate-or-Cancel semantics).
 const KafkaTopicOrdersMarketExpired = "orders.market_expired"
+
+const KafkaTopicOrdersUpdated = "trading.orders.updated"
 
 // TradeExecutedMessage is the payload published to trades.executed.
 // Produced by: matching service.
@@ -42,6 +45,27 @@ type MarketOrderExpiredMessage struct {
 	OrderID        string    `json:"order_id"`
 	FilledQuantity int       `json:"filled_quantity"` // total qty filled by the engine
 	OccurredAt     time.Time `json:"occurred_at"`
+}
+
+// OrderUpdatedMessage is emitted by the matching engine whenever an order's
+// matching state changes (e.g. partial fill, filled, expired).
+//
+// This message enables downstream domains to react without importing the engine
+// package directly.
+type OrderUpdatedMessage struct {
+	EventID        string               `json:"event_id"`
+	OrderID        string               `json:"order_id"`
+	UserID         string               `json:"user_id"`
+	AccountID      string               `json:"account_id"`
+	Symbol         string               `json:"symbol"`
+	Side           domainOrder.Side     `json:"side"`
+	OrderType      domainOrder.OrderType `json:"order_type"`
+	Status         domainOrder.Status   `json:"status"`
+	Quantity       int                  `json:"quantity"`
+	FilledQuantity int                  `json:"filled_quantity"`
+	Price          pkgdecimal.Decimal   `json:"price"`
+	AvgFillPrice   pkgdecimal.Decimal   `json:"avg_fill_price"`
+	OccurredAt     time.Time            `json:"occurred_at"`
 }
 
 // DecodeKafkaPayload unmarshals both plain JSON messages and Debezium/Kafka

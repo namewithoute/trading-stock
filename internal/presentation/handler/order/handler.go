@@ -24,10 +24,40 @@ func NewOrderHandler(orderUseCase orderUC.UseCase, logger *zap.Logger) *OrderHan
 	}
 }
 
+// extractUserID safely extracts and validates user_id from context
+func extractUserID(c echo.Context) (string, bool) {
+	userIDRaw := c.Get("user_id")
+	if userIDRaw == nil {
+		return "", false
+	}
+
+	userID, ok := userIDRaw.(string)
+	if !ok || userID == "" {
+		return "", false
+	}
+
+	return userID, true
+}
+
 // CreateOrder creates a new order (protected)
 // POST /api/v1/orders
 func (h *OrderHandler) CreateOrder(c echo.Context) error {
-	userID := c.Get("user_id")
+	// Extract user_id from context (set by AuthMiddleware)
+	userIDRaw := c.Get("user_id")
+	if userIDRaw == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"message": "Unauthorized",
+			"error":   "user_id not found in context",
+		})
+	}
+
+	userID, ok := userIDRaw.(string)
+	if !ok || userID == "" {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"message": "Unauthorized",
+			"error":   "invalid user_id",
+		})
+	}
 
 	// TODO: Implement create order logic
 	// 1. Get user ID from context
@@ -49,7 +79,7 @@ func (h *OrderHandler) CreateOrder(c echo.Context) error {
 	// Call UseCase
 	createdOrder, err := h.orderUseCase.CreateOrder(
 		c.Request().Context(),
-		userID.(string),
+		userID,
 		orderReq.AccountID,
 		orderReq.Symbol,
 		orderReq.Side,
@@ -79,7 +109,13 @@ func (h *OrderHandler) CreateOrder(c echo.Context) error {
 // ListOrders lists all orders of current user (protected)
 // GET /api/v1/orders
 func (h *OrderHandler) ListOrders(c echo.Context) error {
-	userID := c.Get("user_id")
+	userID, ok := extractUserID(c)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"message": "Unauthorized",
+			"error":   "invalid user_id",
+		})
+	}
 
 	var listOrdersRequest ListOrdersRequest
 	if err := c.Bind(&listOrdersRequest); err != nil {
@@ -101,7 +137,7 @@ func (h *OrderHandler) ListOrders(c echo.Context) error {
 
 	orders, err := h.orderUseCase.ListOrders(
 		c.Request().Context(),
-		userID.(string),
+		userID,
 		listOrdersRequest.Symbol,
 		listOrdersRequest.Status,
 		limit,
@@ -146,8 +182,15 @@ func (h *OrderHandler) ListOrders(c echo.Context) error {
 // GetOrderDetail gets order details (protected)
 // GET /api/v1/orders/:id
 func (h *OrderHandler) GetOrderDetail(c echo.Context) error {
+	userID, ok := extractUserID(c)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"message": "Unauthorized",
+			"error":   "invalid user_id",
+		})
+	}
+
 	orderID := c.Param("id")
-	userID := c.Get("user_id").(string)
 
 	// 1. Fetch order from repository via usecase
 	o, err := h.orderUseCase.GetOrder(c.Request().Context(), orderID)
@@ -180,8 +223,15 @@ func (h *OrderHandler) GetOrderDetail(c echo.Context) error {
 // CancelOrder cancels an order (protected)
 // DELETE /api/v1/orders/:id
 func (h *OrderHandler) CancelOrder(c echo.Context) error {
+	userID, ok := extractUserID(c)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"message": "Unauthorized",
+			"error":   "invalid user_id",
+		})
+	}
+
 	orderID := c.Param("id")
-	userID := c.Get("user_id").(string)
 
 	// 1. Fetch order to verify ownership before cancelling
 	o, err := h.orderUseCase.GetOrder(c.Request().Context(), orderID)
@@ -213,8 +263,15 @@ func (h *OrderHandler) CancelOrder(c echo.Context) error {
 // the old order is cancelled (releasing any reserved funds) and a new order is
 // placed with the updated price / quantity.
 func (h *OrderHandler) UpdateOrder(c echo.Context) error {
+	userID, ok := extractUserID(c)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"message": "Unauthorized",
+			"error":   "invalid user_id",
+		})
+	}
+
 	orderID := c.Param("id")
-	userID := c.Get("user_id").(string)
 
 	// 1. Parse and validate request body
 	var req UpdateOrderRequest

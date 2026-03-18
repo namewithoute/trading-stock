@@ -42,8 +42,15 @@ type SubmitResult struct {
 // OrderUpdate represents an order status update
 type OrderUpdate struct {
 	OrderID        string
+	UserID         string
+	AccountID      string
+	Symbol         string
+	Side           order.Side
+	OrderType      order.OrderType
 	Status         order.Status
+	Quantity       int
 	FilledQuantity int
+	Price          apd.Decimal
 	AvgFillPrice   apd.Decimal
 	Timestamp      time.Time
 }
@@ -431,8 +438,15 @@ func (me *MatchingEngine) publishTrade(trade *Trade) {
 func (me *MatchingEngine) publishOrderUpdate(o *order.Order) {
 	update := &OrderUpdate{
 		OrderID:        o.ID,
+		UserID:         o.UserID,
+		AccountID:      o.AccountID,
+		Symbol:         o.Symbol,
+		Side:           o.Side,
+		OrderType:      o.Type,
 		Status:         o.Status,
+		Quantity:       o.Quantity,
 		FilledQuantity: o.FilledQuantity,
+		Price:          o.Price,
 		AvgFillPrice:   o.AvgFillPrice,
 		Timestamp:      time.Now(),
 	}

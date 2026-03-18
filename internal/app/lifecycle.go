@@ -60,6 +60,11 @@ func (a *App) Run() error {
 		}()
 	}
 
+	// ── Matching Engine Event Publisher ───────────────────────────────
+	if a.EventPublisher != nil && a.MatchingEngine != nil {
+		a.EventPublisher.StartEventConsumer(workerCtx, a.MatchingEngine)
+	}
+
 	// ── Order Fill Consumer ───────────────────────────────────────────
 	if a.OrderFillConsumer != nil {
 		go func() {
@@ -67,10 +72,24 @@ func (a *App) Run() error {
 		}()
 	}
 
+	// ── Order Updated Consumer ────────────────────────────────────────
+	if a.OrderUpdatedConsumer != nil {
+		go func() {
+			a.OrderUpdatedConsumer.Run(workerCtx)
+		}()
+	}
+
 	// ── Account Trade Consumer ────────────────────────────────────────
 	if a.AccountTradeConsumer != nil {
 		go func() {
 			a.AccountTradeConsumer.Run(workerCtx)
+		}()
+	}
+
+	// ── Account Order Updated Consumer ────────────────────────────────
+	if a.AccountOrderUpdatedConsumer != nil {
+		go func() {
+			a.AccountOrderUpdatedConsumer.Run(workerCtx)
 		}()
 	}
 

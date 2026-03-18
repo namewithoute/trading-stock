@@ -5,6 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 
+	infraEvents "trading-stock/internal/infrastructure/events"
+	pkgdecimal "trading-stock/pkg/decimal"
+
+	"github.com/google/uuid"
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
 )
@@ -57,15 +61,31 @@ func (ep *EventPublisher) PublishTrade(ctx context.Context, trade *Trade) error 
 
 // PublishOrderUpdate publishes an order update event to Kafka
 func (ep *EventPublisher) PublishOrderUpdate(ctx context.Context, update *OrderUpdate) error {
+	msgBody := infraEvents.OrderUpdatedMessage{
+		EventID:        uuid.New().String(),
+		OrderID:        update.OrderID,
+		UserID:         update.UserID,
+		AccountID:      update.AccountID,
+		Symbol:         update.Symbol,
+		Side:           update.Side,
+		OrderType:      update.OrderType,
+		Status:         update.Status,
+		Quantity:       update.Quantity,
+		FilledQuantity: update.FilledQuantity,
+		Price:          pkgdecimal.From(update.Price),
+		AvgFillPrice:   pkgdecimal.From(update.AvgFillPrice),
+		OccurredAt:     update.Timestamp,
+	}
+
 	// Convert update to JSON
-	updateJSON, err := json.Marshal(update)
+	updateJSON, err := json.Marshal(msgBody)
 	if err != nil {
 		return fmt.Errorf("failed to marshal order update: %w", err)
 	}
 
 	// Create Kafka message
 	msg := kafka.Message{
-		Topic: "trading.orders.updated",
+		Topic: infraEvents.KafkaTopicOrdersUpdated,
 		Key:   []byte(update.OrderID),
 		Value: updateJSON,
 	}

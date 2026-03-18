@@ -8,6 +8,7 @@ import (
 	"trading-stock/internal/config"
 	"trading-stock/internal/domain"
 	infraAccount "trading-stock/internal/infrastructure/account"
+	infraEngine "trading-stock/internal/infrastructure/engine"
 	infraMarket "trading-stock/internal/infrastructure/market"
 	infraMatching "trading-stock/internal/infrastructure/matching"
 	infraOrder "trading-stock/internal/infrastructure/order"
@@ -57,12 +58,23 @@ type App struct {
 
 	// Matching: consumes orders.accepted → runs engine → writes trades + outbox
 	MatchingConsumer *infraMatching.MatchingConsumer
+	MatchingEngine   *infraEngine.MatchingEngine
+
+	// Engine event publisher: consumes in-process channels and publishes to Kafka
+	EventPublisher *infraEngine.EventPublisher
 
 	// Fill consumer: consumes trades.executed → updates order aggregate state
 	OrderFillConsumer *infraOrder.OrderFillConsumer
 
+	// Order update consumer: consumes trading.orders.updated → updates order aggregate
+	OrderUpdatedConsumer *infraOrder.OrderUpdatedConsumer
+
 	// Account settlement: consumes trades.executed → settles funds
 	AccountTradeConsumer *infraAccount.TradeConsumer
+
+	// Account order update consumer: consumes trading.orders.updated and releases
+	// unused BUY reserved funds when order is final.
+	AccountOrderUpdatedConsumer *infraAccount.OrderUpdatedConsumer
 
 	// Market data: consumes trades.executed → updates price + candle tables
 	MarketTradeConsumer *infraMarket.MarketTradeConsumer
